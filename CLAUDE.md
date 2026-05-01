@@ -1,7 +1,77 @@
-# glocal30Hub Architecture Guide
+# G30SotaHub v2 — Architecture Guide
 
 > **이 문서는 AI 에이전트가 프로젝트에 처음 붙을 때 읽는 진입점입니다.**
 > 코드를 읽기 전에 이 문서를 먼저 읽으면 구조를 즉시 파악할 수 있습니다.
+
+---
+
+## 🚨 통합 컨텍스트 (2026-04-30~) — 반드시 먼저 읽기
+
+본 폴더 `G30SotaHub_v2` 는 두 별개 프로젝트를 통합하여 진화한 **R&D Knowledge Graph Platform**:
+
+- **glocal30Hub** (Hub 베이스, 이 문서의 §"프로젝트 개요" 이하가 그 설명)
+- **vfx-sota-monitor** (SOTA 자동 수집·점수화·계보 + Arca 에이전트 — Phase 1-2 에서 흡수)
+
+### 핵심 결정사항 (모두 합의 완료)
+
+1. **단일 5090 PC** 배포 — Web/Postgres/Ollama/크롤러 한 곳, Tailscale 분산 종료
+2. **Karpathy LLM Wiki 온톨로지** — raw / wiki / outputs 3-tier, Ingest / Query / Lint 3 ops
+3. **노드그래프 시각화** (reactflow) — 트리 X, 그래프 O. 분야 자유 추가/이동/병합
+4. **노드 카드** 에 GitHub / HuggingFace / arXiv / Papers With Code / X 통합 표시 + 계보 + 담당자
+5. **모터헤드** 등 외부 협업사를 `external` 역할로 가입 → 같은 프로젝트 내 모델 공유 (가시성 옵션 B)
+6. **NAS** 영상 저장 — 네트워크 드라이브 마운트, 백엔드 프록시 스트리밍
+7. **Arca 주간 리포트** — 자동 초안 → 본인 + 관리자 검토 → 발행 워크플로
+8. **마이그레이션**: vfx-sota-monitor SQLite 데이터(572KB, 68 items) 폐기 + 재크롤로 깨끗하게 시작
+
+### 현재 진행 상태 (Phase 0-6 로드맵)
+
+| Phase | 내용 | 상태 |
+|-------|------|------|
+| **0** | 부트스트랩 (이 폴더 생성, 정체성 확립) | ✅ 완료 (2026-05-01) |
+| **1** | DB 스키마 마이그레이션 (3-4일) | ⏭ 다음 |
+| **2** | VFX 백엔드 흡수 (4-5일) | — |
+| **3** | 그래프 UI (5-6일) | — |
+| **4** | 모터헤드 협업 UX (3-4일) | — |
+| **5** | Arca 주간 리포트 (4-6일) | — |
+| **6** | 정리 + vfx-sota-monitor 폐기 (2-3일) | — |
+
+### 필독 문서
+
+- **마스터 설계서** (14장): [`docs/superpowers/plans/2026-04-30-vfx-integration-knowledge-graph.md`](docs/superpowers/plans/2026-04-30-vfx-integration-knowledge-graph.md) — 비전·아키텍처·온톨로지·스키마·권한·Arca 리포트·Phase 분할
+- **Phase 1 즉시 액션**: [`PLAN.md`](PLAN.md)
+- **선행 분석 기록**: `Z:\Antigravity_prj\Vault\00_Master\_log.md` (2026-04-30 통합 결정)
+
+### 두 원본 폴더 (참조용, 변경 금지)
+
+- `Z:\Antigravity_prj\glocal30Hub\` — Hub 원본 (이 폴더의 베이스)
+- `Z:\Antigravity_prj\vfx-sota-monitor\` — VFX 원본 (Phase 1-2 에서 점진적 흡수)
+
+> **이 폴더(G30SotaHub_v2)가 진본**. 두 원본은 역사적 참조용으로만 보존.
+
+### Karpathy LLM Wiki 온톨로지 (글로벌 Vault Protocol 의 코드화)
+
+사용자의 글로벌 Vault Protocol (`C:\Users\USER\.claude\CLAUDE.md`) 을 R&D 도메인에 적용:
+
+| Tier | DB 매핑 | 의미 |
+|------|---------|------|
+| **raw** | `model_raw_snapshots` (불변) | 처음 발견된 원문 (arxiv abstract, github README, ...). 수정 금지 |
+| **wiki** | `sota_items` (수정됨, version 증가) | 우리가 정리한 지식. wiki_body 본문에 [[wikilink]] 포함 |
+| **outputs** | `reports` 테이블 | 주간 리포트, 분석, 비교 |
+
+3 Operations:
+- **Ingest** (자동, 크롤러·야간 배치) — 새 모델 발견 → raw 저장 → wiki 초안 → 엣지 추정 → \_log
+- **Query** (사용자 검색·조회) — memory → wiki → raw, 의미있으면 outputs 저장 + wiki 갱신 (Compounding Loop)
+- **Lint** (주간 헬스체크) — stale (90일+), 모순(contradicted), 깨진 wikilink, 고아 노드
+
+Confidence 태그: `🟢 verified | 🟡 stale | 🔴 contradicted | ⚪ unverified`
+
+### AI 에이전트 작업 시 주의사항
+
+- **Phase 1-6 진행 중**에는 통합 작업이 활발히 일어남. 새 작업 시작 전 [PLAN.md](PLAN.md) 와 마스터 설계서 §10 Phase 분할 확인.
+- 기존 Hub 코드(아래 §"프로젝트 개요" 이하 설명) 가 아직 그대로 살아있음. Phase 2 까지는 회귀 방지가 우선.
+- VFX 의 sources / tasks(arca) / models 는 **Phase 1-2 에서 흡수**됨. 그 전까지는 `Z:\Antigravity_prj\vfx-sota-monitor\` 에서 참조만.
+
+---
 
 ## 프로젝트 개요
 
