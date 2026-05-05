@@ -31,7 +31,7 @@ export default function CategoryDetail() {
   return (
     <div className="space-y-6">
       <Link
-        to="/"
+        to="/vfx"
         className="inline-flex items-center gap-1 text-xs text-neutral-400 hover:text-neutral-100"
       >
         <ChevronLeft className="h-3.5 w-3.5" /> 대시보드

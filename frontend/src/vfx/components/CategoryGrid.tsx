@@ -7,7 +7,7 @@ export default function CategoryGrid({ categories }: { categories: Category[] })
       {categories.map((cat) => (
         <Link
           key={cat.slug}
-          to={`/category/${cat.slug}`}
+          to={`/vfx/category/${cat.slug}`}
           className="group relative overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900 p-4 hover:border-brand-500/50 transition"
         >
           <div className="flex items-start justify-between mb-3">

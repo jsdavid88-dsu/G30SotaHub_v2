@@ -148,6 +148,16 @@ const allNavItems = [
       { path: '/admin', label: 'Admin', icon: AdminIcon, roles: ['admin'] as Role[] },
     ],
   },
+  {
+    section: 'VFX SOTA Monitor',
+    items: [
+      { path: '/vfx', label: 'VFX 대시보드', icon: SotaIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
+      { path: '/vfx/feed', label: 'VFX 피드', icon: PublicationsIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
+      { path: '/vfx/timeline', label: 'VFX 타임라인', icon: WeeklyIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
+      { path: '/vfx/graph', label: '계보 그래프', icon: ProjectsIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
+      { path: '/vfx/submit', label: '제보하기', icon: DailyWriteIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
+    ],
+  },
 ]
 
 const roleConfig: Record<Role, { label: string; initials: string; title: string; subtitle: string; gradient: string }> = {

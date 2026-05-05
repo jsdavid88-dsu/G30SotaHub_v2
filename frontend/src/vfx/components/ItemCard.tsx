@@ -20,7 +20,7 @@ export default function ItemCard({
 
   return (
     <Link
-      to={`/item/${item.id}`}
+      to={`/vfx/item/${item.id}`}
       className="block rounded-lg border border-neutral-800 bg-neutral-900 p-4 hover:border-brand-500/50 transition"
     >
       <div className="flex items-start justify-between gap-3 mb-2">
