@@ -20,6 +20,9 @@ import MemberDetail from './pages/MemberDetail'
 import Sota from './pages/Sota'
 import Reports from './pages/Reports'
 
+// === VFX SOTA Monitor 흡수 (vfx-sota-monitor) ===
+import VfxApp from './vfx/App'
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token, loading } = useAuth()
   if (loading) return <div className="flex items-center justify-center h-screen"><p className="text-gray-400">로딩 중...</p></div>
@@ -35,6 +38,10 @@ function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
+
+            {/* VFX SOTA Monitor — 자체 Layout, anonymous 접근 (Phase 4 에서 인증 통합 예정) */}
+            <Route path="/vfx/*" element={<VfxApp />} />
+
             <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
               <Route path="/" element={<Dashboard />} />
               <Route path="/projects" element={<Projects />} />

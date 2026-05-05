@@ -1,3 +1,4 @@
+# === glocal30Hub 베이스 의존성 ===
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 sqlalchemy[asyncio]==2.0.36
@@ -17,3 +18,19 @@ google-auth==2.27.0
 google-auth-httplib2==0.2.0
 tzdata>=2024.1
 pywebpush==2.0.1
+
+# === VFX SOTA Monitor 흡수 의존성 (vfx-sota-monitor) ===
+# 크롤링/파싱
+beautifulsoup4==4.12.3
+lxml==5.3.0
+huggingface-hub==0.27.0
+praw==7.8.1
+
+# Web crawling (Crawl4AI)
+crawl4ai>=0.8.0
+
+# Scheduling (정기 크롤 + 야간 배치 + 주간 리포트)
+apscheduler==3.11.0
+
+# 시간대
+pytz==2024.2

@@ -39,3 +39,26 @@ docker-compose.override.yml
 # Uploaded files (keep directory structure)
 backend/uploads/*
 !backend/uploads/.gitkeep
+
+# === bkit / PDCA 메타파일 (Hub 잔존물) ===
+docs/.bkit-memory.json
+docs/.pdca-status.json
+
+# === VFX 데이터 (런타임 생성, 절대 commit 금지) ===
+# X/Twitter Playwright 로그인 세션 (토큰 포함 — 절대 외부 노출 금지)
+backend/data/x_browser_profile/
+backend/data/x_tweet_ids.txt
+# 기타 런타임 SQLite 캐시 등
+backend/data/*.db
+backend/data/*.db-journal
+backend/data/*.db-wal
+backend/data/*.db-shm
+# AI cluster worker 의 실제 config (비밀 토큰 포함)
+ai_cluster_worker/config.yaml
+
+# === Crawl4AI 캐시 ===
+.crawl4ai/
+
+# === Python venv 위치 다양 ===
+backend/.venv/
+ai_cluster_worker/.venv/

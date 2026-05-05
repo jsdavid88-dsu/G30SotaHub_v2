@@ -15,6 +15,17 @@ from app.models.report import ReportSnapshot, ReportType, ReportScopeType
 from app.models.announcement import Announcement, AnnouncementRead, AnnouncementAudience
 from app.models.push_subscription import PushSubscription
 
+# === VFX SOTA Monitor 흡수 (vfx-sota-monitor) ===
+from app.models.vfx_category import Category
+from app.models.vfx_item import Item, ItemCategory
+from app.models.vfx_item_group import ItemGroup
+from app.models.vfx_lineage import LineageEdge
+from app.models.vfx_comment import ItemComment
+from app.models.vfx_crawl_run import CrawlRun
+from app.models.vfx_feed_item import FeedItem
+from app.models.vfx_submission import Submission
+from app.models.vfx_category_suggestion import CategorySuggestion
+
 __all__ = [
     "Base",
     # User
@@ -27,7 +38,7 @@ __all__ = [
     "DailyLog", "DailyBlock", "DailyBlockTag", "BlockSection", "BlockVisibility",
     # Tag
     "Tag", "TagScopeType",
-    # Comment
+    # Comment (Hub: daily_blocks 댓글)
     "Comment",
     # Attendance
     "Attendance", "AttendanceType",
@@ -39,7 +50,7 @@ __all__ = [
     "Notification", "NotificationType",
     # Audit
     "AuditLog",
-    # SOTA
+    # SOTA (Hub: 학생 배정용)
     "SotaItem", "SotaAssignment", "SotaReview", "SotaAssignmentStatus",
     # Report
     "ReportSnapshot", "ReportType", "ReportScopeType",
@@ -47,4 +58,14 @@ __all__ = [
     "Announcement", "AnnouncementRead", "AnnouncementAudience",
     # PushSubscription
     "PushSubscription",
+    # === VFX SOTA Monitor (vfx-sota-monitor 흡수) ===
+    "Category",
+    "Item", "ItemCategory",
+    "ItemGroup",
+    "LineageEdge",
+    "ItemComment",
+    "CrawlRun",
+    "FeedItem",
+    "Submission",
+    "CategorySuggestion",
 ]

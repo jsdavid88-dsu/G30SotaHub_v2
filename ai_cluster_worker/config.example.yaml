@@ -1,0 +1,24 @@
+# AI Cluster Worker 설정 — G30SotaHub v2 통합 모드
+# config.yaml로 복사 후 수정
+
+# Hub 백엔드 엔드포인트 (단일 5090 PC 운용 시 localhost)
+# - 단일 PC:    http://localhost:8000
+# - Tailscale:  http://100.x.x.x:8000
+# - LAN:        http://192.168.x.x:8000
+MAIN_PC_URL: http://localhost:8000
+
+# Hub .env 의 admin_token 과 동일하게
+ADMIN_TOKEN: change-me-to-random-string
+
+# 통합 후 VFX API 는 /api/v1/vfx prefix 아래에 있음
+# (worker 코드가 자동으로 prefix 처리)
+
+# Ollama 설정
+OLLAMA_BASE_URL: http://localhost:11434/v1
+OLLAMA_MODEL: gemma4:26b
+OLLAMA_TIMEOUT: 300
+
+# 배치 설정
+BATCH_SIZE: 4           # 한 번에 몇 개씩 프롬프트에 넣을지
+MAX_ITEMS_PER_RUN: 50   # 한 번 실행에서 최대 몇 개 처리할지
+TEMPERATURE: 0.3

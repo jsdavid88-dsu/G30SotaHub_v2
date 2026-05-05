@@ -32,6 +32,37 @@ class Settings(BaseSettings):
     # Frontend
     FRONTEND_URL: str = "http://localhost:3000"
 
+    # =========================================================================
+    # VFX SOTA Monitor 통합 설정 (vfx-sota-monitor 흡수)
+    # =========================================================================
+
+    # External API tokens (optional, 비워두면 해당 소스 스킵)
+    github_token: str = ""
+    hf_token: str = ""
+    reddit_client_id: str = ""
+    reddit_client_secret: str = ""
+    reddit_user_agent: str = "g30sotahub-v2"
+
+    # Admin token — AI Cluster Worker 가 Hub API 호출 시 인증 (Phase 1-2 까지 한정)
+    admin_token: str = "change-me-in-production"
+
+    # Crawl4AI / Firecrawl 옵션
+    firecrawl_base_url: str = "http://localhost:3002"
+    firecrawl_enabled: bool = False  # 기본 OFF (Crawl4AI 가 메인)
+
+    # Ollama (단일 5090 PC 운용 시 localhost, 분산 운용 시 Tailscale IP)
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "gemma4:26b"
+
+    # NAS / Storage (Phase 3 영상 첨부)
+    nas_base_path: str = ""  # 예: "M:\\sota_files" — 비어있으면 backend/uploads/ fallback
+
+    # APScheduler 토글 (테스트 / alembic 실행 시 비활성화)
+    scheduler_enabled: bool = True
+
+    # CORS 추가 (VFX 프론트가 별도 포트에서 도는 경우 대비, 기본은 Hub 와 동일)
+    cors_extra_origins: list[str] = []
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 

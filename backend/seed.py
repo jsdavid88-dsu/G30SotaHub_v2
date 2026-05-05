@@ -459,5 +459,22 @@ async def reset_and_seed():
         print("  external@company.com (외부파트너)")
 
 
+async def seed_all():
+    """Hub + VFX 통합 시드."""
+    await reset_and_seed()
+    # === VFX 카테고리 시드 ===
+    try:
+        from seed_vfx import seed_categories  # backend/seed_vfx.py
+        print()
+        print("=" * 60)
+        print("VFX 카테고리 시드 시작...")
+        print("=" * 60)
+        await seed_categories()
+    except ImportError as e:
+        print(f"⚠️  VFX seed skip (seed_vfx.py 없음): {e}")
+    except Exception as e:
+        print(f"⚠️  VFX seed 실패 (계속 진행): {e}")
+
+
 if __name__ == "__main__":
-    asyncio.run(reset_and_seed())
+    asyncio.run(seed_all())
