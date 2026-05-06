@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Sparkles, TrendingUp, AlertCircle, Clock } from "lucide-react";
+import { Sparkles, TrendingUp, AlertCircle, Clock, Database, Zap } from "lucide-react";
 import { fetchCategories } from "../api/categories";
 import { fetchSummary } from "../api/stats";
 import { fetchItems } from "../api/items";
@@ -35,6 +35,50 @@ function StatCard({
   );
 }
 
+function EmptyState({ categoryCount }: { categoryCount: number }) {
+  return (
+    <div className="rounded-2xl border-2 border-dashed border-neutral-800 bg-neutral-900/40 p-10 mt-4">
+      <div className="text-center mb-6">
+        <Sparkles className="h-10 w-10 mx-auto text-brand-400/60 mb-3" />
+        <h3 className="text-lg font-semibold text-neutral-100 mb-1">
+          아직 수집된 모델이 없습니다
+        </h3>
+        <p className="text-sm text-neutral-500">
+          {categoryCount}개 분야 준비됨 · 데이터 채우려면 아래 두 가지 방법 중 하나
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-3xl mx-auto">
+        <div className="rounded-xl bg-neutral-900 border border-neutral-800 p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Zap className="h-4 w-4 text-amber-400" />
+            <div className="font-semibold text-sm text-neutral-200">A. 새로 크롤</div>
+          </div>
+          <p className="text-xs text-neutral-500 mb-3">
+            arxiv / GitHub / HF / Reddit / X 에서 신규 수집. 5-10분 소요.
+          </p>
+          <code className="block bg-neutral-950 p-2 rounded text-[10px] text-neutral-400 overflow-x-auto whitespace-nowrap">
+            POST /api/v1/vfx/admin/crawl
+          </code>
+        </div>
+
+        <div className="rounded-xl bg-neutral-900 border border-neutral-800 p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Database className="h-4 w-4 text-brand-400" />
+            <div className="font-semibold text-sm text-neutral-200">B. 원본 데이터 마이그레이션</div>
+          </div>
+          <p className="text-xs text-neutral-500 mb-3">
+            vfx-sota-monitor 의 SQLite (68 items + 210 feeds) 를 그대로 가져옴.
+          </p>
+          <code className="block bg-neutral-950 p-2 rounded text-[10px] text-neutral-400 overflow-x-auto whitespace-nowrap">
+            python scripts/migrate_vfx_sqlite.py
+          </code>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { data: categories = [] } = useQuery({
     queryKey: ["categories"],
@@ -58,6 +102,9 @@ export default function Dashboard() {
 
   const activeCategories = sortedCategories.filter((c) => c.item_count > 0);
   const emptyCategories = sortedCategories.filter((c) => c.item_count === 0);
+
+  // 진짜 빈 상태: 카테고리는 있는데 items 가 전혀 없음
+  const isEmpty = categories.length > 0 && (summary?.total_items ?? 0) === 0 && p0Items.length === 0;
 
   return (
     <div className="space-y-6">
@@ -96,6 +143,9 @@ export default function Dashboard() {
         />
       </div>
 
+      {/* 빈 상태 — 카테고리 nav + 거대한 빈 공간 대신 풍부한 placeholder 표시 */}
+      {isEmpty && <EmptyState categoryCount={categories.length} />}
+
       {p0Items.length > 0 && (
         <section>
           <h2 className="text-sm font-semibold text-red-400 mb-3 flex items-center gap-2">
@@ -122,7 +172,8 @@ export default function Dashboard() {
         </div>
       )}
 
-      {emptyCategories.length > 0 && (
+      {/* 데이터 채워진 후에만 '대기 중' 표시 (빈 상태에서는 EmptyState 가 메시지 줌) */}
+      {!isEmpty && emptyCategories.length > 0 && (
         <section>
           <h2 className="text-xs font-semibold text-neutral-500 uppercase mb-2">
             대기 중 ({emptyCategories.length})
@@ -131,7 +182,7 @@ export default function Dashboard() {
             {emptyCategories.map((cat) => (
               <Link
                 key={cat.slug}
-                to={`/category/${cat.slug}`}
+                to={`/vfx/category/${cat.slug}`}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-800 bg-neutral-900/50 px-3 py-1.5 text-xs text-neutral-400 hover:border-neutral-700"
               >
                 <span>{cat.icon}</span>
