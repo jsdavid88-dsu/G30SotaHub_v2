@@ -39,9 +39,7 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
 
-            {/* VFX SOTA Monitor — 자체 Layout, anonymous 접근 (Phase 4 에서 인증 통합 예정) */}
-            <Route path="/vfx/*" element={<VfxApp />} />
-
+            {/* Hub Layout — VFX 를 자식으로 nest → 양쪽 사이드바(Hub + VFX) 동시 표시 */}
             <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
               <Route path="/" element={<Dashboard />} />
               <Route path="/projects" element={<Projects />} />
@@ -58,6 +56,9 @@ function App() {
               <Route path="/notifications" element={<Notifications />} />
               <Route path="/sota" element={<Sota />} />
               <Route path="/reports" element={<Reports />} />
+
+              {/* VFX SOTA Monitor — Hub Layout 의 main 안에 nested. 자체 Sidebar 만 가짐. */}
+              <Route path="/vfx/*" element={<VfxApp />} />
             </Route>
           </Routes>
         </BrowserRouter>

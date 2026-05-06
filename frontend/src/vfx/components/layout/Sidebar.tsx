@@ -1,7 +1,8 @@
-import { Link, NavLink } from "react-router-dom";
-import { LayoutDashboard, Calendar, GitBranch, Film, Flame, Send, ArrowLeft } from "lucide-react";
+// VFX Sidebar — Hub Layout 안에서 두 번째 사이드바로 표시.
+// Hub Sidebar 가 항상 옆에 있으므로 'Hub 으로 돌아가기' 링크 제거.
+import { NavLink } from "react-router-dom";
+import { LayoutDashboard, Calendar, GitBranch, Film, Flame, Send } from "lucide-react";
 
-// 통합 환경: 모든 path 가 /vfx prefix 아래
 const navItems = [
   { to: "/vfx", label: "대시보드", icon: LayoutDashboard, end: true },
   { to: "/vfx/timeline", label: "타임라인", icon: Calendar, end: false },
@@ -12,25 +13,16 @@ const navItems = [
 
 export default function Sidebar() {
   return (
-    <aside className="w-60 border-r border-neutral-800 bg-neutral-900 flex flex-col">
-      {/* Hub 로 돌아가기 — 통합 환경 */}
-      <Link
-        to="/"
-        className="flex items-center gap-2 px-5 py-3 border-b border-neutral-800 text-xs text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800 transition"
-      >
-        <ArrowLeft className="h-3 w-3" />
-        R&D Hub 로 돌아가기
-      </Link>
-
-      <div className="flex items-center gap-3 px-5 py-5 border-b border-neutral-800">
-        <Film className="h-6 w-6 text-brand-400" />
+    <aside className="w-52 shrink-0 border-r border-neutral-800 bg-neutral-900 flex flex-col">
+      <div className="flex items-center gap-3 px-4 py-4 border-b border-neutral-800">
+        <Film className="h-5 w-5 text-brand-400" />
         <div>
           <div className="font-semibold text-sm">VFX SOTA</div>
-          <div className="text-xs text-neutral-500">Monitor</div>
+          <div className="text-[10px] text-neutral-500">Monitor</div>
         </div>
       </div>
 
-      <nav className="flex-1 px-3 py-4 space-y-1">
+      <nav className="flex-1 px-2 py-3 space-y-1">
         {navItems.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
@@ -50,7 +42,7 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      <div className="px-5 py-4 border-t border-neutral-800 text-xs text-neutral-500">
+      <div className="px-4 py-3 border-t border-neutral-800 text-[10px] text-neutral-500">
         Red Cat Gang · DSU
       </div>
     </aside>
