@@ -28,15 +28,15 @@ function StatCard({
   accent: string;
 }) {
   return (
-    <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
-      <div className="flex items-center gap-3">
-        <div className={`rounded-lg p-2 ${accent}`}>
+    <div className="rounded-2xl border border-neutral-800 bg-gradient-to-br from-neutral-900 to-neutral-950 p-5 hover:border-neutral-700 transition">
+      <div className="flex items-start justify-between">
+        <div className={`rounded-xl p-2.5 ${accent}`}>
           <Icon className="h-5 w-5" />
         </div>
-        <div>
-          <div className="text-xs text-neutral-500">{label}</div>
-          <div className="text-xl font-bold text-neutral-100">{value}</div>
-        </div>
+      </div>
+      <div className="mt-4">
+        <div className="text-xs text-neutral-500 uppercase tracking-wider">{label}</div>
+        <div className="text-3xl font-bold text-neutral-100 mt-1 tabular-nums">{value}</div>
       </div>
     </div>
   );
@@ -247,53 +247,61 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 max-w-7xl mx-auto">
       {/* 헤딩 + Admin 툴바 */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold">대시보드</h1>
-          <p className="text-sm text-neutral-500 mt-1">
-            VFX 관련 AI SOTA 실시간 추적 · 마지막 업데이트:{" "}
-            {summary?.last_crawl ? new Date(summary.last_crawl).toLocaleString("ko-KR") : "—"}
+          <h1 className="text-3xl font-bold tracking-tight">대시보드</h1>
+          <p className="text-base text-neutral-400 mt-2">
+            VFX 관련 AI SOTA 실시간 추적 · 마지막 업데이트{" "}
+            <span className="text-neutral-300">
+              {summary?.last_crawl ? new Date(summary.last_crawl).toLocaleString("ko-KR") : "—"}
+            </span>
           </p>
         </div>
         <AdminToolbar />
       </div>
 
-      {/* 통계 카드 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard icon={TrendingUp} label="전체 추적" value={summary?.total_items ?? "—"} accent="bg-brand-500/20 text-brand-400" />
-        <StatCard icon={Sparkles} label="이번 주 신규" value={summary?.new_this_week ?? "—"} accent="bg-emerald-500/20 text-emerald-400" />
-        <StatCard icon={AlertCircle} label="P0 긴급" value={summary?.p0_count ?? "—"} accent="bg-red-500/20 text-red-400" />
-        <StatCard icon={Clock} label="P1 중요" value={summary?.p1_count ?? "—"} accent="bg-amber-500/20 text-amber-400" />
+      {/* 통계 카드 — 더 큰 카드, 그라디언트 */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard icon={TrendingUp} label="전체 추적" value={summary?.total_items ?? "—"} accent="bg-brand-500/20 text-brand-300" />
+        <StatCard icon={Sparkles} label="이번 주 신규" value={summary?.new_this_week ?? "—"} accent="bg-emerald-500/20 text-emerald-300" />
+        <StatCard icon={AlertCircle} label="P0 긴급" value={summary?.p0_count ?? "—"} accent="bg-red-500/20 text-red-300" />
+        <StatCard icon={Clock} label="P1 중요" value={summary?.p1_count ?? "—"} accent="bg-amber-500/20 text-amber-300" />
       </div>
 
-      {/* 분야 (카테고리) 관리 — 항상 표시 */}
+      {/* 분야 (카테고리) 관리 — 카드 grid */}
       <section>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-neutral-300">분야 ({categories.length})</h2>
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h2 className="text-lg font-semibold text-neutral-100">분야 <span className="text-neutral-500 font-normal">({categories.length})</span></h2>
+            <p className="text-xs text-neutral-500 mt-1">VFX 추적 분야 — 클릭하면 분야별 모델 모음</p>
+          </div>
           <button
             onClick={() => setAddOpen(true)}
-            className="flex items-center gap-1 rounded-lg border border-brand-700/50 bg-brand-600/10 hover:bg-brand-600/20 px-3 py-1.5 text-xs text-brand-300"
+            className="flex items-center gap-1.5 rounded-lg border border-brand-700/40 bg-brand-600/10 hover:bg-brand-600/20 px-4 py-2 text-sm text-brand-300 transition"
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="h-4 w-4" />
             카테고리 추가
           </button>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           {sortedCategories.map((cat) => (
-            <div key={cat.slug} className="group relative inline-flex items-center gap-1.5 rounded-lg border border-neutral-800 bg-neutral-900/50 hover:border-neutral-700 pl-3 pr-1 py-1">
-              <Link to={`/vfx/category/${cat.slug}`} className="flex items-center gap-1.5 text-xs text-neutral-300">
-                <span>{cat.icon}</span>
-                <span>{cat.name_ko}</span>
-                <span className="text-neutral-500">({cat.item_count})</span>
+            <div key={cat.slug} className="group relative">
+              <Link
+                to={`/vfx/category/${cat.slug}`}
+                className="flex flex-col items-center justify-center rounded-2xl border border-neutral-800 bg-gradient-to-br from-neutral-900 to-neutral-950 hover:border-brand-500/50 hover:shadow-lg hover:shadow-brand-500/10 px-4 py-5 transition"
+              >
+                <span className="text-3xl mb-2">{cat.icon || "📂"}</span>
+                <span className="text-sm font-medium text-neutral-200 text-center">{cat.name_ko}</span>
+                <span className="text-xs text-neutral-500 mt-1.5 tabular-nums">{cat.item_count} 모델</span>
               </Link>
               <button
                 onClick={() => onDelete(cat.slug, cat.name_ko)}
                 title="삭제"
-                className="opacity-0 group-hover:opacity-100 p-1 rounded text-neutral-500 hover:text-red-400 hover:bg-red-500/10 transition"
+                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1.5 rounded-md bg-neutral-900/80 text-neutral-500 hover:text-red-400 hover:bg-red-500/20 transition"
               >
-                <X className="h-3 w-3" />
+                <X className="h-3.5 w-3.5" />
               </button>
             </div>
           ))}
