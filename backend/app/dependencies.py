@@ -53,8 +53,9 @@ async def get_current_user(
             detail="User not found",
         )
     # Block pending/inactive users from all endpoints.
-    # Exception: /auth/me uses get_current_user_any_status instead.
-    if user.status != UserStatus.active:
+    # Exception 1: /auth/me uses get_current_user_any_status instead.
+    # Exception 2: DEBUG 모드에서는 status 검사 우회 — dev 환경에서 admin 승인 마찰 제거.
+    if not settings.DEBUG and user.status != UserStatus.active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is pending approval. Please wait for admin activation.",
