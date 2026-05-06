@@ -29,6 +29,19 @@
   --color-text-secondary: #475569;
   --color-text-muted: #94a3b8;
   --color-border: #e2e8f0;
+
+  /* === VFX SOTA Monitor brand 색상 (vfx-sota-monitor 흡수) === */
+  /* VFX 컴포넌트가 brand-50 ~ brand-900 사용. 미정의 시 빈 화면처럼 보임. */
+  --color-brand-50: oklch(0.97 0.02 280);
+  --color-brand-100: oklch(0.93 0.05 280);
+  --color-brand-200: oklch(0.86 0.09 280);
+  --color-brand-300: oklch(0.76 0.14 280);
+  --color-brand-400: oklch(0.66 0.18 280);
+  --color-brand-500: oklch(0.57 0.20 280);
+  --color-brand-600: oklch(0.48 0.21 280);
+  --color-brand-700: oklch(0.40 0.19 280);
+  --color-brand-800: oklch(0.33 0.16 280);
+  --color-brand-900: oklch(0.25 0.12 280);
 }
 
 * {
