@@ -94,7 +94,7 @@ export default function Submit() {
   };
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
+    <div className="space-y-8">
       {/* 헤딩 */}
       <div>
         <h1 className="text-3xl font-bold text-slate-900 tracking-tight">제보</h1>

@@ -188,17 +188,17 @@ function AddCategoryModal({ open, onClose, onCreated }: {
 // ============================================================================
 function EmptyState() {
   return (
-    <div className="rounded-2xl bg-white border-2 border-dashed border-slate-200 p-10">
-      <div className="text-center mb-6">
-        <div className="inline-flex rounded-2xl bg-indigo-50 p-3 mb-4">
-          <Sparkles className="h-8 w-8 text-indigo-500" />
+    <div className="rounded-2xl bg-white border-2 border-dashed border-slate-200 p-8">
+      <div className="flex items-center gap-4 mb-5">
+        <div className="rounded-2xl bg-indigo-50 p-3 flex-shrink-0">
+          <Sparkles className="h-7 w-7 text-indigo-500" />
         </div>
-        <h3 className="text-xl font-semibold text-slate-900 mb-1">아직 수집된 모델이 없습니다</h3>
-        <p className="text-sm text-slate-500">
-          분야는 준비됐어요. 두 가지 방법 중 하나로 채울 수 있습니다.
-        </p>
+        <div>
+          <h3 className="text-lg font-semibold text-slate-900">아직 수집된 모델이 없습니다</h3>
+          <p className="text-sm text-slate-500 mt-0.5">분야는 준비됐어요. 두 가지 방법 중 하나로 채울 수 있습니다.</p>
+        </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl mx-auto">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
           <div className="flex items-center gap-2 mb-2">
             <Zap className="h-4 w-4 text-amber-600" />
@@ -259,7 +259,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto">
+    <div className="space-y-8">
       {/* 헤딩 */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
