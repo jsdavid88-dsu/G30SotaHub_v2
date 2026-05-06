@@ -75,8 +75,11 @@ def upgrade() -> None:
     op.create_index("ix_lineage_parent", "lineage_edges", ["parent_id"])
     op.create_index("ix_lineage_child", "lineage_edges", ["child_id"])
 
+    # Issue #2: VFX 의 'comments' 는 Hub 의 daily_blocks 댓글 'comments' 와 충돌.
+    # 통합 시 VFX 의 Comment 모델은 ItemComment / item_comments 로 리네임됨
+    # (backend/app/models/vfx_comment.py). 마이그레이션도 그에 맞춤.
     op.create_table(
-        "comments",
+        "item_comments",
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("item_id", sa.Integer(), sa.ForeignKey("items.id", ondelete="CASCADE")),
         sa.Column("user_id", sa.String(100)),
@@ -85,7 +88,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
-    op.create_index("ix_comments_item", "comments", ["item_id"])
+    op.create_index("ix_item_comments_item", "item_comments", ["item_id"])
 
     op.create_table(
         "crawl_runs",
@@ -102,7 +105,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("crawl_runs")
-    op.drop_table("comments")
+    op.drop_table("item_comments")
     op.drop_table("lineage_edges")
     op.drop_table("item_categories")
     op.drop_table("items")

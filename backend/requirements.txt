@@ -2,7 +2,9 @@
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 sqlalchemy[asyncio]==2.0.36
+# DB drivers: asyncpg (mac/linux 우선), psycopg v3 (Windows 디버깅 친화 — Issue #5)
 asyncpg==0.30.0
+psycopg[binary]>=3.2
 alembic==1.14.1
 python-dotenv==1.0.1
 httpx==0.28.1

@@ -1,4 +1,11 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
+
+# Issue #3: pydantic-settings 의 env_file 은 cwd 기준 상대경로 → backend/ 에서
+# 띄우면 backend/.env 를 찾는데 실제 .env 는 프로젝트 루트. 절대경로로 고정.
+# config.py 위치: <root>/backend/app/config.py → parent x3 = <root>
+_ENV_FILE = str(Path(__file__).resolve().parent.parent.parent / ".env")
 
 
 class Settings(BaseSettings):
@@ -63,7 +70,7 @@ class Settings(BaseSettings):
     # CORS 추가 (VFX 프론트가 별도 포트에서 도는 경우 대비, 기본은 Hub 와 동일)
     cors_extra_origins: list[str] = []
 
-    model_config = {"env_file": ".env", "extra": "ignore"}
+    model_config = {"env_file": _ENV_FILE, "extra": "ignore"}
 
 
 settings = Settings()

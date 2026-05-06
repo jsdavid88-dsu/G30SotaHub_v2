@@ -26,13 +26,14 @@ docker compose up -d db | Out-Null
 Write-Host "  ✓ db 기동" -ForegroundColor Green
 
 # 2) Backend (새 PowerShell 창)
+# Windows 의 ProactorEventLoop 가 async PG driver 와 비호환 (Issue #1).
+# run_server.py 가 WindowsSelectorEventLoopPolicy 를 먼저 설정 후 uvicorn.run.
 Write-Host "[2/3] Backend 시작 (새 창)..." -ForegroundColor Yellow
 $backendCmd = @"
 Set-Location '$ProjectRoot\backend'
-`$env:DATABASE_URL = 'postgresql+asyncpg://hub:hub@localhost:5432/hub'
 .\.venv\Scripts\Activate.ps1
-Write-Host '=== Backend (uvicorn :8000) ===' -ForegroundColor Cyan
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+Write-Host '=== Backend (run_server.py :8000, --reload) ===' -ForegroundColor Cyan
+python run_server.py --reload
 "@
 Start-Process powershell -ArgumentList "-NoExit", "-Command", $backendCmd
 Write-Host "  ✓ Backend 창 열림" -ForegroundColor Green
