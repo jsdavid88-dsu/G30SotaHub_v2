@@ -203,5 +203,12 @@ async def dev_login(
     if user is None:
         raise HTTPException(status_code=404, detail=f"User with email {email} not found")
 
+    # DEV 모드: pending/inactive 사용자도 자동 active (admin 승인 우회 — dev-login 자체가 dev 전용이니).
+    # 운영에서는 DEBUG=False 라 이 엔드포인트 자체 차단됨.
+    if user.status != UserStatus.active:
+        user.status = UserStatus.active
+        await db.commit()
+        await db.refresh(user)
+
     access_token = _create_access_token(user)
     return {"access_token": access_token, "token_type": "bearer", "user": {"id": str(user.id), "email": user.email, "name": user.name, "role": user.role.value}}
