@@ -1,6 +1,6 @@
 from app.models.base import Base
 from app.models.user import User, AdvisorRelation, UserRole, UserStatus
-from app.models.project import Project, ProjectMember, ProjectStatus, ProjectMemberRole
+from app.models.project import Project, ProjectMember, ProjectStatus, ProjectMemberRole, ProjectType
 from app.models.task import Task, TaskAssignee, TaskGroup, TaskGroupStatus, TaskStatus, TaskPriority
 from app.models.daily import DailyLog, DailyBlock, DailyBlockTag, BlockSection, BlockVisibility
 from app.models.tag import Tag, TagScopeType
@@ -31,7 +31,7 @@ __all__ = [
     # User
     "User", "AdvisorRelation", "UserRole", "UserStatus",
     # Project
-    "Project", "ProjectMember", "ProjectStatus", "ProjectMemberRole",
+    "Project", "ProjectMember", "ProjectStatus", "ProjectMemberRole", "ProjectType",
     # Task
     "Task", "TaskAssignee", "TaskGroup", "TaskGroupStatus", "TaskStatus", "TaskPriority",
     # Daily

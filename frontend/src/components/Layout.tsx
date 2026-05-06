@@ -139,7 +139,9 @@ const allNavItems = [
   {
     section: 'Management',
     items: [
-      { path: '/sota', label: 'SOTA', icon: SotaIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
+      // 통합: Hub SOTA 와 VFX 모니터 한 진입점으로 통합. 클릭 시 /vfx 로 이동.
+      // (Phase 1 완료 후 SotaItem 통합되면 단일 페이지로 일원화 예정)
+      { path: '/vfx', label: 'SOTA Monitor', icon: SotaIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
       { path: '/reports', label: 'Reports', icon: ReportsIcon, roles: ['admin', 'professor', 'student'] as Role[] },
       { path: '/members', label: 'Students', icon: TeamIcon, roles: ['admin', 'professor'] as Role[] },
       { path: '/calendar', label: 'Calendar', icon: CalendarIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
@@ -148,16 +150,7 @@ const allNavItems = [
       { path: '/admin', label: 'Admin', icon: AdminIcon, roles: ['admin'] as Role[] },
     ],
   },
-  {
-    section: 'VFX SOTA Monitor',
-    items: [
-      { path: '/vfx', label: 'VFX 대시보드', icon: SotaIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
-      { path: '/vfx/feed', label: 'VFX 피드', icon: PublicationsIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
-      { path: '/vfx/timeline', label: 'VFX 타임라인', icon: WeeklyIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
-      { path: '/vfx/graph', label: '계보 그래프', icon: ProjectsIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
-      { path: '/vfx/submit', label: '제보하기', icon: DailyWriteIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
-    ],
-  },
+  // VFX SOTA Monitor 섹션 제거 — VFX 영역 진입 후 자체 사이드바가 나오므로 중복.
 ]
 
 const roleConfig: Record<Role, { label: string; initials: string; title: string; subtitle: string; gradient: string }> = {

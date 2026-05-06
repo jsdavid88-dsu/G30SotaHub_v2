@@ -22,6 +22,18 @@ class ProjectMemberRole(str, enum.Enum):
     lead = "lead"
 
 
+class ProjectType(str, enum.Enum):
+    """3단 트리 구조 (Phase 1).
+
+    - umbrella: 최상위 (예: 모터헤드AIxVFX)
+    - discipline: 분야 (예: video_matting, head_swap) — VFX Category 와 매핑
+    - initiative: 구체 작업 (예: MatAnyone3 채택 검토)
+    """
+    umbrella = "umbrella"
+    discipline = "discipline"
+    initiative = "initiative"
+
+
 class Project(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "projects"
 
@@ -30,6 +42,18 @@ class Project(UUIDMixin, TimestampMixin, Base):
     status: Mapped[ProjectStatus] = mapped_column(
         Enum(ProjectStatus), nullable=False, default=ProjectStatus.active
     )
+    project_type: Mapped[ProjectType] = mapped_column(
+        Enum(ProjectType), nullable=False, default=ProjectType.initiative,
+        server_default="initiative",
+    )
+    # Phase 1: 3단 트리 구조 (umbrella → discipline → initiative)
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True
+    )
+    # VFX Category 와 일대일 매핑 (Phase 1: discipline 타입 Project 가 Category 를 흡수)
+    vfx_category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("categories.id", ondelete="SET NULL"), nullable=True, unique=True
+    )
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
@@ -37,6 +61,12 @@ class Project(UUIDMixin, TimestampMixin, Base):
     )
 
     members: Mapped[list["ProjectMember"]] = relationship(back_populates="project")
+    parent: Mapped["Project | None"] = relationship(
+        "Project", remote_side="Project.id", back_populates="children"
+    )
+    children: Mapped[list["Project"]] = relationship(
+        "Project", back_populates="parent", cascade="all"
+    )
 
 
 class ProjectMember(UUIDMixin, Base):

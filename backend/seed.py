@@ -460,7 +460,7 @@ async def reset_and_seed():
 
 
 async def seed_all():
-    """Hub + VFX 통합 시드."""
+    """Hub + VFX 통합 시드 + Phase 1 (모터헤드AIxVFX umbrella + 분야 Project)."""
     await reset_and_seed()
     # === VFX 카테고리 시드 ===
     try:
@@ -474,6 +474,19 @@ async def seed_all():
         print(f"⚠️  VFX seed skip (seed_vfx.py 없음): {e}")
     except Exception as e:
         print(f"⚠️  VFX seed 실패 (계속 진행): {e}")
+
+    # === Phase 1: 모터헤드AIxVFX umbrella + 분야 Project ===
+    try:
+        from seed_phase1 import seed_phase1  # backend/seed_phase1.py
+        print()
+        print("=" * 60)
+        print("Phase 1: 모터헤드AIxVFX 트리 시드 시작...")
+        print("=" * 60)
+        await seed_phase1()
+    except ImportError as e:
+        print(f"⚠️  Phase 1 seed skip: {e}")
+    except Exception as e:
+        print(f"⚠️  Phase 1 seed 실패 (계속 진행): {e}")
 
 
 if __name__ == "__main__":
