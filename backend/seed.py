@@ -49,17 +49,27 @@ def kst_dt(y, m, d, h=0, mi=0):
 async def reset_and_seed():
     async with async_session() as db:
         # ── FULL RESET ────────────────────────────────────────────────────
+        # Phase 1 통합 (2026-05-07): sota_items 테이블 drop 됨 (g0a1b2c3d4e5).
+        # Hub 학생 배정은 items 테이블의 source='manual' 행 + sota_assignments 가 담당.
         tables = [
             "notifications", "event_participants", "events",
             "comments", "daily_block_tags", "daily_blocks", "daily_logs",
             "task_assignees", "tasks", "attendance",
-            "report_snapshots", "sota_reviews", "sota_assignments", "sota_items",
+            # SOTA 통합: sota_items 는 마이그레이션에서 drop됨. items 가 통합 모델.
+            "report_snapshots", "sota_reviews", "sota_assignments",
+            "item_categories", "item_comments", "lineage_edges",
+            "items", "item_groups",
             "attachments", "audit_logs",
             "project_members", "advisor_relations",
             "tags", "projects", "users",
         ]
         for t in tables:
-            await db.execute(text(f"DELETE FROM {t}"))
+            try:
+                await db.execute(text(f"DELETE FROM {t}"))
+            except Exception as e:
+                # 테이블이 없거나 (마이그레이션 미적용) 다른 이유로 실패 — skip
+                print(f"  skip DELETE {t}: {type(e).__name__}")
+                await db.rollback()
         await db.flush()
         print("All tables cleared.")
 

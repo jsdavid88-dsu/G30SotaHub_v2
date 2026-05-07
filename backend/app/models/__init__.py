@@ -10,14 +10,17 @@ from app.models.attachment import Attachment, AttachmentOwnerType
 from app.models.event import Event, EventParticipant, EventType, EventSource
 from app.models.notification import Notification, NotificationType
 from app.models.audit import AuditLog
-from app.models.sota import SotaItem, SotaAssignment, SotaReview, SotaAssignmentStatus
+# === SOTA 통합 (Phase 1, 2026-05-07) ===
+# Hub SotaItem class → vfx_item.Item 으로 흡수
+# SotaAssignment / SotaReview 는 유지 (sota_item_id: int FK to items.id)
+from app.models.sota import SotaAssignment, SotaReview, SotaAssignmentStatus
 from app.models.report import ReportSnapshot, ReportType, ReportScopeType
 from app.models.announcement import Announcement, AnnouncementRead, AnnouncementAudience
 from app.models.push_subscription import PushSubscription
 
-# === VFX SOTA Monitor 흡수 (vfx-sota-monitor) ===
+# === VFX SOTA Monitor (Phase 1: 통합 모델) ===
 from app.models.vfx_category import Category
-from app.models.vfx_item import Item, ItemCategory
+from app.models.vfx_item import Item, ItemCategory, SotaItem, LifecycleStatus, ConfidenceStatus
 from app.models.vfx_item_group import ItemGroup
 from app.models.vfx_lineage import LineageEdge
 from app.models.vfx_comment import ItemComment
@@ -50,17 +53,20 @@ __all__ = [
     "Notification", "NotificationType",
     # Audit
     "AuditLog",
-    # SOTA (Hub: 학생 배정용)
-    "SotaItem", "SotaAssignment", "SotaReview", "SotaAssignmentStatus",
+    # SOTA Assignment system (Hub)
+    "SotaAssignment", "SotaReview", "SotaAssignmentStatus",
     # Report
     "ReportSnapshot", "ReportType", "ReportScopeType",
     # Announcement
     "Announcement", "AnnouncementRead", "AnnouncementAudience",
     # PushSubscription
     "PushSubscription",
-    # === VFX SOTA Monitor (vfx-sota-monitor 흡수) ===
+    # === SOTA Item (통합 — Hub SotaItem 흡수, VFX 자동 수집 + 수동 등록 모두) ===
     "Category",
-    "Item", "ItemCategory",
+    "Item",          # 통합 모델 (table: items)
+    "SotaItem",      # alias for Item (호환성)
+    "ItemCategory",
+    "LifecycleStatus", "ConfidenceStatus",
     "ItemGroup",
     "LineageEdge",
     "ItemComment",

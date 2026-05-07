@@ -1,8 +1,15 @@
+"""SOTA Assignment / Review — Hub 학생 배정 시스템.
+
+Phase 1 통합 (2026-05-07):
+- SotaItem class 제거 → app.models.vfx_item.Item 으로 통합
+- SotaAssignment.sota_item_id: UUID → int FK (items.id)
+- 자동 수집(arxiv/github/...) + 수동 등록(manual) 모두 학생 배정 대상
+"""
 import enum
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Index, String
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -18,34 +25,22 @@ class SotaAssignmentStatus(str, enum.Enum):
     rejected = "rejected"
 
 
-class SotaItem(UUIDMixin, Base):
-    __tablename__ = "sota_items"
-    __table_args__ = (
-        Index("ix_sota_items_published_at", "published_at"),
-    )
-
-    title: Mapped[str] = mapped_column(String(500), nullable=False)
-    source: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    summary: Mapped[str | None] = mapped_column(String, nullable=True)
-    url: Mapped[str | None] = mapped_column(String, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default="now()", nullable=False
-    )
-
-    assignments: Mapped[list["SotaAssignment"]] = relationship(back_populates="sota_item")
-
-
 class SotaAssignment(UUIDMixin, Base):
+    """학생/외부 협력자에게 SOTA 모델(Item) 배정.
+
+    sota_item_id 는 items.id (int FK) 를 가리킴.
+    모델 통합 전에는 sota_items.id (UUID) 였음.
+    """
     __tablename__ = "sota_assignments"
     __table_args__ = (
         Index("ix_sota_assignments_assignee_id", "assignee_id"),
         Index("ix_sota_assignments_status", "status"),
         Index("ix_sota_assignments_due_date", "due_date"),
+        Index("ix_sota_assignments_sota_item_id", "sota_item_id"),
     )
 
-    sota_item_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("sota_items.id", ondelete="CASCADE"), nullable=False
+    sota_item_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("items.id", ondelete="CASCADE"), nullable=False
     )
     assignee_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
@@ -61,7 +56,9 @@ class SotaAssignment(UUIDMixin, Base):
         DateTime(timezone=True), server_default="now()", nullable=False
     )
 
-    sota_item: Mapped["SotaItem"] = relationship(back_populates="assignments")
+    item: Mapped["Item"] = relationship(
+        "Item", back_populates="assignments", foreign_keys=[sota_item_id]
+    )
     assignee: Mapped["User"] = relationship(foreign_keys=[assignee_id])
     reviews: Mapped[list["SotaReview"]] = relationship(back_populates="sota_assignment")
 

@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { useRole } from '../contexts/RoleContext'
 
 // ── Types ────────────────────────────────────────────────────────────────
+// Phase 1 통합 (2026-05-07): SotaItem.id 가 UUID → int 로 변경됨.
+// VFX Item 과 통합되어 자동 수집 + 수동 등록 모두 동일 모델.
 
 type SotaReview = {
   id: string
@@ -15,7 +18,7 @@ type SotaReview = {
 
 type SotaAssignment = {
   id: string
-  sota_item_id: string
+  sota_item_id: number   // was string (UUID)
   assignee_id: string
   assignee_name: string
   assigned_by: string | null
@@ -26,15 +29,30 @@ type SotaAssignment = {
 }
 
 type SotaItem = {
-  id: string
+  id: number               // was string (UUID)
   title: string
-  source: string | null
+  source: string | null    // 'manual' = Hub 수동 등록, 'arxiv'/'github'/'hf'/'reddit'/'x' = 자동 수집
+  external_id?: string | null
   url: string | null
-  summary: string | null
+  summary: string | null   // = abstract
   published_at: string | null
+  discovered_at?: string | null
   created_at: string
   assignments_count: number
   llm_analysis: string | null
+
+  // 통합 후 신규 필드
+  description?: string | null
+  wiki_body?: string | null
+  confidence_status?: string | null
+  version?: number
+  refs?: Record<string, string | null>
+  lifecycle_status?: string
+  priority?: string | null
+  llm_score?: number
+  llm_reason?: string | null
+  free_tags?: string[]
+  category_slugs?: string[]
 }
 
 type SotaItemDetail = SotaItem & {
@@ -48,7 +66,7 @@ type UserSummary = {
   role: string
 }
 
-// ── API helpers (inline to avoid modifying client.ts) ────────────────────
+// ── API helpers ───────────────────────────────────────────────────────────
 
 const API_BASE = '/api/v1'
 
@@ -75,14 +93,14 @@ async function sotaRequest<T>(path: string, options?: RequestInit): Promise<T> {
 const sotaApi = {
   list: (params?: Record<string, string>) =>
     sotaRequest<SotaItem[]>(`/sota/?${new URLSearchParams(params)}`),
-  get: (id: string) => sotaRequest<SotaItemDetail>(`/sota/${id}`),
+  get: (id: number) => sotaRequest<SotaItemDetail>(`/sota/${id}`),
   create: (data: any) =>
     sotaRequest<SotaItem>('/sota/', { method: 'POST', body: JSON.stringify(data) }),
-  update: (id: string, data: any) =>
+  update: (id: number, data: any) =>
     sotaRequest<SotaItem>(`/sota/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  delete: (id: string) =>
+  delete: (id: number) =>
     sotaRequest<void>(`/sota/${id}`, { method: 'DELETE' }),
-  assign: (id: string, data: any) =>
+  assign: (id: number, data: any) =>
     sotaRequest<SotaAssignment>(`/sota/${id}/assign`, { method: 'POST', body: JSON.stringify(data) }),
   updateAssignment: (assignmentId: string, data: any) =>
     sotaRequest<SotaAssignment>(`/sota/assignments/${assignmentId}`, { method: 'PATCH', body: JSON.stringify(data) }),
@@ -90,7 +108,7 @@ const sotaApi = {
     sotaRequest<SotaReview>(`/sota/assignments/${assignmentId}/review`, { method: 'POST', body: JSON.stringify(data) }),
   my: (params?: Record<string, string>) =>
     sotaRequest<SotaAssignment[]>(`/sota/my?${new URLSearchParams(params)}`),
-  analyze: (id: string) => sotaRequest<any>(`/sota/${id}/analyze`),
+  analyze: (id: number) => sotaRequest<any>(`/sota/${id}/analyze`),
   users: (params?: Record<string, string>) =>
     sotaRequest<any>(`/users/?${new URLSearchParams(params)}`),
 }
@@ -104,6 +122,23 @@ const statusLabels: Record<string, { label: string; bg: string; color: string }>
   submitted: { label: '제출완료', bg: '#dbeafe', color: '#1d4ed8' },
   approved: { label: '승인', bg: '#d1fae5', color: '#047857' },
   rejected: { label: '반려', bg: '#fee2e2', color: '#dc2626' },
+}
+
+const lifecycleColors: Record<string, { bg: string; color: string; label: string }> = {
+  research: { bg: '#f1f5f9', color: '#475569', label: '연구' },
+  dev: { bg: '#dbeafe', color: '#1d4ed8', label: '개발' },
+  testing: { bg: '#fef3c7', color: '#b45309', label: '테스트' },
+  production: { bg: '#d1fae5', color: '#047857', label: '운영' },
+  deprecated: { bg: '#fee2e2', color: '#dc2626', label: '폐기' },
+}
+
+const sourceColors: Record<string, { bg: string; color: string; label: string }> = {
+  manual: { bg: '#fef3c7', color: '#92400e', label: '수동등록' },
+  arxiv: { bg: '#fef2f2', color: '#dc2626', label: 'arXiv' },
+  github: { bg: '#f1f5f9', color: '#0f172a', label: 'GitHub' },
+  hf: { bg: '#fff7ed', color: '#ea580c', label: 'HuggingFace' },
+  reddit: { bg: '#fff7ed', color: '#c2410c', label: 'Reddit' },
+  x: { bg: '#f8fafc', color: '#0f172a', label: 'X' },
 }
 
 const cardStyle = {
@@ -142,14 +177,14 @@ export default function Sota() {
   const [creating, setCreating] = useState(false)
 
   // Assign modal state
-  const [assignItemId, setAssignItemId] = useState<string | null>(null)
+  const [assignItemId, setAssignItemId] = useState<number | null>(null)
   const [students, setStudents] = useState<UserSummary[]>([])
   const [assignForm, setAssignForm] = useState({ assignee_id: '', due_date: '' })
   const [assigning, setAssigning] = useState(false)
 
   // Student state
   const [myAssignments, setMyAssignments] = useState<SotaAssignment[]>([])
-  const [myItems, setMyItems] = useState<Record<string, SotaItem>>({})
+  const [myItems, setMyItems] = useState<Record<number, SotaItem>>({})
   const [reviewForms, setReviewForms] = useState<Record<string, string>>({})
   const [submittingReview, setSubmittingReview] = useState<string | null>(null)
 
@@ -178,9 +213,9 @@ export default function Sota() {
       const assignments = await sotaApi.my(params)
       setMyAssignments(assignments)
 
-      // Fetch item details for each unique sota_item_id
+      // Fetch item details for each unique sota_item_id (now numeric)
       const itemIds = [...new Set(assignments.map((a) => a.sota_item_id))]
-      const itemMap: Record<string, SotaItem> = {}
+      const itemMap: Record<number, SotaItem> = {}
       await Promise.allSettled(
         itemIds.map(async (id) => {
           try {
@@ -207,7 +242,7 @@ export default function Sota() {
 
   // ── Handlers ───────────────────────────────────────────────────────
 
-  const handleOpenDetail = async (itemId: string) => {
+  const handleOpenDetail = async (itemId: number) => {
     try {
       const detail = await sotaApi.get(itemId)
       setSelectedItem(detail)
@@ -237,7 +272,7 @@ export default function Sota() {
     }
   }
 
-  const handleDelete = async (itemId: string) => {
+  const handleDelete = async (itemId: number) => {
     if (!confirm('이 SOTA 항목을 삭제하시겠습니까?')) return
     try {
       await sotaApi.delete(itemId)
@@ -249,7 +284,7 @@ export default function Sota() {
     }
   }
 
-  const handleOpenAssign = async (itemId: string) => {
+  const handleOpenAssign = async (itemId: number) => {
     setAssignItemId(itemId)
     setAssignForm({ assignee_id: '', due_date: '' })
     try {
@@ -312,7 +347,7 @@ export default function Sota() {
     }
   }
 
-  const handleAnalyze = async (itemId: string) => {
+  const handleAnalyze = async (itemId: number) => {
     try {
       await sotaApi.analyze(itemId)
     } catch (err: any) {
@@ -328,6 +363,33 @@ export default function Sota() {
       <span style={{
         display: 'inline-block', padding: '3px 10px', borderRadius: 99,
         fontSize: 12, fontWeight: 600, background: info.bg, color: info.color,
+      }}>
+        {info.label}
+      </span>
+    )
+  }
+
+  const SourceBadge = ({ source }: { source: string | null }) => {
+    if (!source) return null
+    const info = sourceColors[source] || { bg: '#f1f5f9', color: '#64748b', label: source }
+    return (
+      <span style={{
+        display: 'inline-block', padding: '2px 8px', borderRadius: 6,
+        fontSize: 11, fontWeight: 600, background: info.bg, color: info.color,
+      }}>
+        {info.label}
+      </span>
+    )
+  }
+
+  const LifecycleBadge = ({ status }: { status?: string }) => {
+    if (!status || status === 'research') return null
+    const info = lifecycleColors[status]
+    if (!info) return null
+    return (
+      <span style={{
+        display: 'inline-block', padding: '2px 8px', borderRadius: 6,
+        fontSize: 11, fontWeight: 600, background: info.bg, color: info.color,
       }}>
         {info.label}
       </span>
@@ -370,13 +432,18 @@ export default function Sota() {
               <div key={item.id} style={{ ...cardStyle, padding: '20px 24px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <h3 style={{ fontSize: 15, fontWeight: 600, color: '#0f172a', marginBottom: 6 }}>{item.title}</h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                      <h3 style={{ fontSize: 15, fontWeight: 600, color: '#0f172a' }}>{item.title}</h3>
+                      <SourceBadge source={item.source} />
+                      <LifecycleBadge status={item.lifecycle_status} />
+                    </div>
                     <div style={{ display: 'flex', gap: 16, fontSize: 13, color: '#64748b', flexWrap: 'wrap' }}>
-                      {item.source && <span>{item.source}</span>}
                       {item.published_at && <span>{new Date(item.published_at).toLocaleDateString('ko-KR')}</span>}
                     </div>
-                    {item.summary && (
-                      <p style={{ fontSize: 13, color: '#475569', marginTop: 8, lineHeight: 1.6 }}>{item.summary}</p>
+                    {(item.description || item.summary) && (
+                      <p style={{ fontSize: 13, color: '#475569', marginTop: 8, lineHeight: 1.6 }}>
+                        {item.description || item.summary}
+                      </p>
                     )}
                   </div>
                   {item.url && (
@@ -437,14 +504,15 @@ export default function Sota() {
                   {/* Header */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 16 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
                         <h3 style={{ fontSize: 16, fontWeight: 600, color: '#0f172a' }}>
                           {item?.title || '논문 정보 로딩 중...'}
                         </h3>
                         <StatusBadge status={assignment.status} />
+                        <SourceBadge source={item?.source ?? null} />
+                        <LifecycleBadge status={item?.lifecycle_status} />
                       </div>
                       <div style={{ display: 'flex', gap: 16, fontSize: 13, color: '#64748b', flexWrap: 'wrap' }}>
-                        {item?.source && <span>{item.source}</span>}
                         {assignment.due_date && (
                           <span>마감: {new Date(assignment.due_date).toLocaleDateString('ko-KR')}</span>
                         )}
@@ -459,9 +527,11 @@ export default function Sota() {
                   </div>
 
                   {/* Summary */}
-                  {item?.summary && (
+                  {(item?.description || item?.summary) && (
                     <div style={{ padding: '12px 16px', background: '#f8fafc', borderRadius: 10, marginBottom: 16, border: '1px solid #f1f5f9' }}>
-                      <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.6 }}>{item.summary}</p>
+                      <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.6 }}>
+                        {item?.description || item?.summary}
+                      </p>
                     </div>
                   )}
 
@@ -534,23 +604,33 @@ export default function Sota() {
             SOTA 관리
           </h1>
           <p style={{ color: '#64748b', fontSize: 15, marginTop: 6, lineHeight: 1.5 }}>
-            {items.length}개 논문 등록됨
+            {items.length}개 논문 등록됨 — 자동 수집 + 수동 등록 통합
           </p>
         </div>
-        <button onClick={() => setShowCreateModal(true)}
-          style={{
+        <div style={{ display: 'flex', gap: 10 }}>
+          <Link to="/vfx" style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
-            padding: '10px 20px', borderRadius: 12, fontSize: 14, fontWeight: 600,
-            border: 'none', cursor: 'pointer', background: '#4f46e5', color: '#fff',
-            boxShadow: '0 2px 8px rgba(79,70,229,0.3)', transition: 'all 0.15s',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = '#3730a3' }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = '#4f46e5' }}>
-          <svg style={{ width: 16, height: 16 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-          논문 등록
-        </button>
+            padding: '10px 18px', borderRadius: 12, fontSize: 13, fontWeight: 600,
+            border: '1px solid #e2e8f0', background: '#fff', color: '#475569',
+            textDecoration: 'none', transition: 'all 0.15s',
+          }}>
+            VFX 자동수집 →
+          </Link>
+          <button onClick={() => setShowCreateModal(true)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              padding: '10px 20px', borderRadius: 12, fontSize: 14, fontWeight: 600,
+              border: 'none', cursor: 'pointer', background: '#4f46e5', color: '#fff',
+              boxShadow: '0 2px 8px rgba(79,70,229,0.3)', transition: 'all 0.15s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = '#3730a3' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = '#4f46e5' }}>
+            <svg style={{ width: 16, height: 16 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            논문 등록
+          </button>
+        </div>
       </div>
 
       {/* Search + Filter */}
@@ -586,6 +666,9 @@ export default function Sota() {
       ) : items.length === 0 ? (
         <div style={{ ...cardStyle, padding: 48, textAlign: 'center' }}>
           <p style={{ fontSize: 15, color: '#94a3b8' }}>등록된 SOTA 논문이 없습니다.</p>
+          <p style={{ fontSize: 13, color: '#cbd5e1', marginTop: 8 }}>
+            VFX 자동수집을 실행하거나 논문을 직접 등록해보세요.
+          </p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }} className="opacity-0 animate-fade-in stagger-2">
@@ -596,9 +679,22 @@ export default function Sota() {
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <h3 style={{ fontSize: 15, fontWeight: 600, color: '#0f172a', marginBottom: 6 }}>{item.title}</h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                    <h3 style={{ fontSize: 15, fontWeight: 600, color: '#0f172a' }}>{item.title}</h3>
+                    <SourceBadge source={item.source} />
+                    <LifecycleBadge status={item.lifecycle_status} />
+                    {item.priority && (
+                      <span style={{
+                        padding: '2px 8px', borderRadius: 6,
+                        background: item.priority === 'P0' ? '#fee2e2' : item.priority === 'P1' ? '#fef3c7' : '#f1f5f9',
+                        color: item.priority === 'P0' ? '#dc2626' : item.priority === 'P1' ? '#b45309' : '#64748b',
+                        fontSize: 11, fontWeight: 600,
+                      }}>
+                        {item.priority}
+                      </span>
+                    )}
+                  </div>
                   <div style={{ display: 'flex', gap: 16, fontSize: 13, color: '#64748b', flexWrap: 'wrap', alignItems: 'center' }}>
-                    {item.source && <span>{item.source}</span>}
                     {item.published_at && <span>{new Date(item.published_at).toLocaleDateString('ko-KR')}</span>}
                     <span style={{
                       display: 'inline-flex', alignItems: 'center', gap: 4,
@@ -609,10 +705,15 @@ export default function Sota() {
                       </svg>
                       {item.assignments_count}명 배정
                     </span>
+                    {(item.llm_score ?? 0) > 0 && (
+                      <span style={{ color: '#7c3aed', fontWeight: 500 }}>
+                        ⚡ Arca {item.llm_score}/100
+                      </span>
+                    )}
                   </div>
-                  {item.summary && (
+                  {(item.description || item.summary) && (
                     <p style={{ fontSize: 13, color: '#475569', marginTop: 8, lineHeight: 1.6, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden' }}>
-                      {item.summary}
+                      {item.description || item.summary}
                     </p>
                   )}
                 </div>
@@ -693,10 +794,25 @@ export default function Sota() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           onClick={() => { setShowDetailModal(false); setSelectedItem(null) }}>
           <div onClick={(e) => e.stopPropagation()}
-            style={{ background: '#fff', borderRadius: 16, padding: 32, width: 680, maxWidth: '95vw', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+            style={{ background: '#fff', borderRadius: 16, padding: 32, width: 720, maxWidth: '95vw', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
             {/* Close button */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-              <h3 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', flex: 1, paddingRight: 16 }}>{selectedItem.title}</h3>
+              <div style={{ flex: 1, paddingRight: 16 }}>
+                <h3 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>{selectedItem.title}</h3>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <SourceBadge source={selectedItem.source} />
+                  <LifecycleBadge status={selectedItem.lifecycle_status} />
+                  {selectedItem.priority && (
+                    <span style={{
+                      padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                      background: selectedItem.priority === 'P0' ? '#fee2e2' : selectedItem.priority === 'P1' ? '#fef3c7' : '#f1f5f9',
+                      color: selectedItem.priority === 'P0' ? '#dc2626' : selectedItem.priority === 'P1' ? '#b45309' : '#64748b',
+                    }}>
+                      {selectedItem.priority}
+                    </span>
+                  )}
+                </div>
+              </div>
               <button onClick={() => { setShowDetailModal(false); setSelectedItem(null) }}
                 style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#64748b' }}>
                 <svg style={{ width: 16, height: 16 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -705,26 +821,59 @@ export default function Sota() {
               </button>
             </div>
 
+            {/* Refs (외부 출처 통합 표시) */}
+            {selectedItem.refs && Object.values(selectedItem.refs).some(Boolean) && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+                {Object.entries(selectedItem.refs)
+                  .filter(([, v]) => Boolean(v))
+                  .map(([k, v]) => (
+                    <a key={k} href={v as string} target="_blank" rel="noopener noreferrer"
+                      style={{
+                        padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 500,
+                        background: '#eff6ff', color: '#1d4ed8', textDecoration: 'none',
+                        border: '1px solid #dbeafe',
+                      }}>
+                      {k}
+                    </a>
+                  ))}
+              </div>
+            )}
+
             {/* Paper Info */}
             <div style={{ padding: '16px 20px', background: '#f8fafc', borderRadius: 12, marginBottom: 20, border: '1px solid #f1f5f9' }}>
-              <div style={{ display: 'flex', gap: 20, fontSize: 13, color: '#64748b', flexWrap: 'wrap', marginBottom: selectedItem.summary ? 12 : 0 }}>
-                {selectedItem.source && (
-                  <span><strong style={{ color: '#475569' }}>출처:</strong> {selectedItem.source}</span>
-                )}
+              <div style={{ display: 'flex', gap: 20, fontSize: 13, color: '#64748b', flexWrap: 'wrap', marginBottom: (selectedItem.description || selectedItem.summary) ? 12 : 0 }}>
                 {selectedItem.published_at && (
                   <span><strong style={{ color: '#475569' }}>발행일:</strong> {new Date(selectedItem.published_at).toLocaleDateString('ko-KR')}</span>
+                )}
+                {(selectedItem.llm_score ?? 0) > 0 && (
+                  <span><strong style={{ color: '#475569' }}>Arca 점수:</strong> {selectedItem.llm_score}/100</span>
                 )}
                 {selectedItem.url && (
                   <a href={selectedItem.url} target="_blank" rel="noopener noreferrer"
                     style={{ color: '#4f46e5', fontWeight: 500 }}>
-                    논문 원문
+                    원문 →
                   </a>
                 )}
               </div>
-              {selectedItem.summary && (
+              {selectedItem.description && (
+                <p style={{ fontSize: 14, color: '#0f172a', lineHeight: 1.6, fontWeight: 500, marginBottom: 8 }}>
+                  {selectedItem.description}
+                </p>
+              )}
+              {selectedItem.summary && selectedItem.summary !== selectedItem.description && (
                 <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.6 }}>{selectedItem.summary}</p>
               )}
             </div>
+
+            {/* LLM Reason (Arca 코멘트) */}
+            {selectedItem.llm_reason && (
+              <div style={{ padding: '12px 16px', background: '#faf5ff', borderRadius: 10, marginBottom: 16, border: '1px solid #e9d5ff' }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 6 }}>
+                  ⚡ Arca 분석
+                </p>
+                <p style={{ fontSize: 13, color: '#581c87', lineHeight: 1.6 }}>{selectedItem.llm_reason}</p>
+              </div>
+            )}
 
             {/* Action buttons */}
             <div style={{ display: 'flex', gap: 10, marginBottom: 24, flexWrap: 'wrap' }}>
