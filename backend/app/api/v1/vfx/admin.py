@@ -16,6 +16,7 @@ from app.config import settings
 from app.database import get_db
 from app.models import CrawlRun, Item, ItemCategory
 from app.models.user import User, UserRole, UserStatus
+from app import run_state
 from app.schemas.vfx.admin import CrawlResult, PendingItem, ScoreUpdate, ScoreUpdateResult
 from app.jobs.code_linker import link_codes_for_arxiv_items
 from app.jobs.crawler import SOURCE_LABELS, crawl_all, crawl_source
@@ -125,6 +126,18 @@ async def score_update(
     return ScoreUpdateResult(updated=count)
 
 
+async def _wrap_run(action: str, label: str, fn, *args):
+    """run_state begin/end 자동 처리. 실패해도 end() 항상 호출."""
+    run_state.begin(action=action, label=label, stage="시작 중...")
+    try:
+        result = await fn(*args)
+        run_state.end(result=result if isinstance(result, dict) else {"value": str(result)})
+        return result
+    except Exception as e:
+        run_state.end(error=str(e)[:500])
+        raise
+
+
 @router.post("/crawl/{source}", response_model=CrawlResult)
 async def trigger_crawl_source(
     source: str,
@@ -137,10 +150,10 @@ async def trigger_crawl_source(
         raise HTTPException(status_code=400, detail=f"Unknown source: {source}")
 
     if wait:
-        result = await crawl_source(source)
+        result = await _wrap_run(f"crawl:{source}", f"수집: {source}", crawl_source, source)
         return CrawlResult(**result)
     else:
-        background.add_task(crawl_source, source)
+        background.add_task(_wrap_run, f"crawl:{source}", f"수집: {source}", crawl_source, source)
         return CrawlResult(source=source)
 
 
@@ -150,7 +163,7 @@ async def trigger_crawl_all(
     _: None = Depends(verify_admin_token),
 ):
     """Trigger all sources (fire-and-forget)."""
-    background.add_task(crawl_all)
+    background.add_task(_wrap_run, "crawl_all", "전체 수집 (모든 소스)", crawl_all)
     return {"status": "started", "sources": SOURCE_LABELS}
 
 
@@ -163,9 +176,9 @@ async def trigger_link_codes(
 ):
     """Scan recent arXiv items and attach matching GitHub repos."""
     if wait:
-        total = await link_codes_for_arxiv_items(max_items=max_items)
+        total = await _wrap_run("link_codes", "코드 링크 (arxiv ↔ GitHub)", link_codes_for_arxiv_items, max_items)
         return {"status": "done", "links_added": total}
-    background.add_task(link_codes_for_arxiv_items, max_items)
+    background.add_task(_wrap_run, "link_codes", "코드 링크 (arxiv ↔ GitHub)", link_codes_for_arxiv_items, max_items)
     return {"status": "started"}
 
 
@@ -178,9 +191,9 @@ async def trigger_build_lineage(
 ):
     """Build lineage edges for arXiv items via Semantic Scholar."""
     if wait:
-        total = await build_lineage_for_new_items(max_items=max_items)
+        total = await _wrap_run("build_lineage", "계보 빌드 (Semantic Scholar)", build_lineage_for_new_items, max_items)
         return {"status": "done", "edges_added": total}
-    background.add_task(build_lineage_for_new_items, max_items)
+    background.add_task(_wrap_run, "build_lineage", "계보 빌드 (Semantic Scholar)", build_lineage_for_new_items, max_items)
     return {"status": "started"}
 
 
@@ -192,9 +205,9 @@ async def trigger_group_items(
 ):
     """Run the item grouper to unify same research across sources."""
     if wait:
-        result = await group_items()
+        result = await _wrap_run("group_items", "아이템 그룹핑", group_items)
         return {"status": "done", **result}
-    background.add_task(group_items)
+    background.add_task(_wrap_run, "group_items", "아이템 그룹핑", group_items)
     return {"status": "started"}
 
 
@@ -208,10 +221,31 @@ async def trigger_night_batch(
     from app.jobs.night_batch import run_night_batch
 
     if wait:
-        results = await run_night_batch()
+        results = await _wrap_run("night_batch", "야간 배치 (Gemma 분석)", run_night_batch)
         return {"status": "done", "results": results}
-    background.add_task(run_night_batch)
+    background.add_task(_wrap_run, "night_batch", "야간 배치 (Gemma 분석)", run_night_batch)
     return {"status": "started"}
+
+
+@router.get("/run-status")
+async def get_run_status(_: None = Depends(verify_admin_token)):
+    """현재 진행 중인 background 작업 상태. RunStatusBar 가 폴링.
+
+    응답 예:
+    {
+      "is_running": true,
+      "action": "night_batch",
+      "label": "야간 배치 (Gemma 분석)",
+      "stage": "Step 3: Scoring",
+      "detail": "12/28 scored",
+      "progress": 0.43,
+      "started_at": "2026-05-07T12:34:56Z",
+      "finished_at": null,
+      "result": null,
+      "error": null
+    }
+    """
+    return run_state.snapshot()
 
 
 @router.get("/runs")

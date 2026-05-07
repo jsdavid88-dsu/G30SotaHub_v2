@@ -16,6 +16,9 @@ import {
 } from "../api/admin";
 import CategorySection from "../components/CategorySection";
 import ItemCard from "../components/ItemCard";
+import ItemTable from "../components/ItemTable";
+import ViewToggle from "../components/ViewToggle";
+import { useViewMode } from "../utils/viewMode";
 import { dedup } from "../utils/dedup";
 
 // ─── Hub design tokens (inline) ───
@@ -291,14 +294,22 @@ function EmptyState() {
 export default function Dashboard() {
   const qc = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
+  const [viewMode] = useViewMode();
 
   const { data: categories = [] } = useQuery({ queryKey: ["categories"], queryFn: fetchCategories });
   const { data: summary } = useQuery({ queryKey: ["summary"], queryFn: fetchSummary });
+  // 발표일 우선 정렬 (사용자 요청)
   const { data: p0Raw = [] } = useQuery({
-    queryKey: ["items", { priority: "P0" }],
-    queryFn: () => fetchItems({ priority: "P0", limit: 10 }),
+    queryKey: ["items", { priority: "P0", sort: "published" }],
+    queryFn: () => fetchItems({ priority: "P0", sort: "published", limit: 10 }),
   });
   const { deduped: p0Items, groupSources: p0Groups } = useMemo(() => dedup(p0Raw), [p0Raw]);
+
+  // Triage 대기 중 (status='new') 카운트
+  const { data: triageQueue = [] } = useQuery({
+    queryKey: ["items", { workflow: "new", count: true }],
+    queryFn: () => fetchItems({ workflow: "new", limit: 500 }),
+  });
 
   const sortedCategories = [...categories].sort((a, b) => {
     if (a.item_count === 0 && b.item_count > 0) return 1;
@@ -333,7 +344,13 @@ export default function Dashboard() {
             </span>
           </p>
         </div>
-        <AdminToolbar />
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 12, color: "var(--color-text-muted)", fontWeight: 500 }}>뷰</span>
+            <ViewToggle />
+          </div>
+          <AdminToolbar />
+        </div>
       </div>
 
       {/* 통계 카드 */}
@@ -351,6 +368,49 @@ export default function Dashboard() {
         <StatCard icon={Clock} label="P1 중요" value={summary?.p1_count ?? "—"}
           accentBg="var(--color-warning-light)" accentColor="var(--color-warning)" />
       </div>
+
+      {/* Triage 큐 — 분류 대기 중인 항목 바로가기 */}
+      {triageQueue.length > 0 && (
+        <Link
+          to="/vfx/triage"
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "16px 24px", marginBottom: 24,
+            background: "linear-gradient(135deg, rgba(79,70,229,0.06), rgba(79,70,229,0.02))",
+            border: "1px solid #c7d2fe",
+            borderRadius: 12,
+            textDecoration: "none",
+            transition: "all 0.15s",
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "var(--color-accent)"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "#c7d2fe"; }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: 10,
+              background: "var(--color-accent)", color: "#fff",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 18, fontWeight: 700, fontVariantNumeric: "tabular-nums",
+            }}>
+              {triageQueue.length}
+            </div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)" }}>
+                분류 대기 중인 새 모델 {triageQueue.length}건
+              </div>
+              <div style={{ fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 }}>
+                배정 / 보류 / 스킵 / 모터헤드 진행 — 한 줄씩 빠르게 처리
+              </div>
+            </div>
+          </div>
+          <span style={{
+            padding: "8px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600,
+            background: "var(--color-accent)", color: "#fff",
+          }}>
+            Triage 시작 →
+          </span>
+        </Link>
+      )}
 
       {/* 분야 섹션 — Hub section pattern */}
       <div style={{ ...cardStyle, marginBottom: 24, overflow: "hidden" }}>
@@ -390,11 +450,17 @@ export default function Dashboard() {
               긴급 (P0)
             </div>
           </div>
-          <div style={{ padding: "20px 28px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
-            {p0Items.slice(0, 6).map((item) => (
-              <ItemCard key={item.id} item={item} groupSources={item.group_id ? p0Groups.get(item.group_id) : undefined} />
-            ))}
-          </div>
+          {viewMode === "table" ? (
+            <div style={{ padding: 16 }}>
+              <ItemTable items={p0Items} sortKey="published_at" sortDir="desc" />
+            </div>
+          ) : (
+            <div style={{ padding: "20px 28px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
+              {p0Items.slice(0, 6).map((item) => (
+                <ItemCard key={item.id} item={item} groupSources={item.group_id ? p0Groups.get(item.group_id) : undefined} />
+              ))}
+            </div>
+          )}
         </div>
       )}
 

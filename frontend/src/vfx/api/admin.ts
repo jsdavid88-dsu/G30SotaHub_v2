@@ -47,6 +47,29 @@ export const triggerBuildLineage = () =>
 export const triggerNightBatch = () =>
   adminPost<{ status: string }>("/admin/night-batch");
 
+// === Run status (RunStatusBar 폴링) ===
+
+export type RunStatus = {
+  is_running: boolean;
+  action: string | null;
+  label: string | null;
+  stage: string | null;
+  detail: string | null;
+  progress: number | null;
+  started_at: string | null;
+  finished_at: string | null;
+  result: Record<string, unknown> | null;
+  error: string | null;
+};
+
+export async function fetchRunStatus(): Promise<RunStatus> {
+  const res = await fetch(`${API_URL}/api/v1/vfx/admin/run-status`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
 // === 카테고리 CRUD (admin / professor 권한) ===
 
 export type CategoryCreatePayload = {
