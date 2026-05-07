@@ -1,10 +1,13 @@
-"""Admin endpoints — protected by X-Admin-Token header.
+"""Admin endpoints — 두 가지 인증 지원.
 
-Used by:
-- AI Cluster Worker (Phase 3) — pending-scoring / score-update
-- Manual ops — crawl trigger, run history
+1. X-Admin-Token (worker 용 — 서버↔서버)
+2. Hub Bearer JWT + admin/professor role (사용자 — Dashboard 의 [전체 수집] 등)
 """
+from typing import Annotated
+
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -12,6 +15,7 @@ from sqlalchemy.orm import selectinload
 from app.config import settings
 from app.database import get_db
 from app.models import CrawlRun, Item, ItemCategory
+from app.models.user import User, UserRole, UserStatus
 from app.schemas.vfx.admin import CrawlResult, PendingItem, ScoreUpdate, ScoreUpdateResult
 from app.jobs.code_linker import link_codes_for_arxiv_items
 from app.jobs.crawler import SOURCE_LABELS, crawl_all, crawl_source
@@ -20,10 +24,44 @@ from app.jobs.lineage_builder import build_lineage_for_new_items
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
+_bearer = HTTPBearer(auto_error=False)
+ALGORITHM = "HS256"
 
-def verify_admin_token(x_admin_token: str | None = Header(default=None)) -> None:
-    if not x_admin_token or x_admin_token != settings.admin_token:
-        raise HTTPException(status_code=401, detail="Invalid admin token")
+
+async def verify_admin_token(
+    x_admin_token: str | None = Header(default=None),
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)] = None,
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """둘 중 하나면 통과:
+    1) X-Admin-Token == settings.admin_token (worker)
+    2) Authorization Bearer JWT 가 admin/professor 사용자 (Hub user)
+    """
+    # 1) Worker용 X-Admin-Token
+    if x_admin_token and x_admin_token == settings.admin_token:
+        return
+
+    # 2) Hub user (admin / professor)
+    if credentials is not None:
+        try:
+            payload = jwt.decode(credentials.credentials, settings.SECRET_KEY, algorithms=[ALGORITHM])
+            user_id = payload.get("sub")
+        except JWTError:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token: missing subject")
+        import uuid
+        result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+        user = result.scalar_one_or_none()
+        if user is None:
+            raise HTTPException(status_code=401, detail="User not found")
+        if not settings.DEBUG and user.status != UserStatus.active:
+            raise HTTPException(status_code=403, detail="Account not active")
+        if user.role not in (UserRole.admin, UserRole.professor):
+            raise HTTPException(status_code=403, detail="Admin/professor role required")
+        return
+
+    raise HTTPException(status_code=401, detail="Invalid admin token (X-Admin-Token or Bearer JWT 필요)")
 
 
 @router.get("/pending-scoring", response_model=list[PendingItem])
