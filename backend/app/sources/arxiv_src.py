@@ -110,30 +110,47 @@ def fetch_arxiv(
     # httpx URL-encodes; but arXiv wants raw '+OR+' — build URL manually
     url = f"{ARXIV_API}?search_query={cat_query}&sortBy=submittedDate&sortOrder=descending&max_results={max_results}"
 
-    logger.info(f"Fetching arXiv: {url}")
+    logger.info(f"[arxiv] cats={cats}, days_back={days_back}, max={max_results}")
+    logger.info(f"[arxiv] GET {url}")
     try:
         resp = httpx.get(url, timeout=60, follow_redirects=True)
         resp.raise_for_status()
     except httpx.HTTPError as e:
-        logger.error(f"arXiv fetch failed: {e}")
+        logger.error(f"[arxiv] HTTP failed: {e}")
         return []
+
+    logger.info(f"[arxiv] resp status={resp.status_code}, content_len={len(resp.content)}")
 
     try:
         root = ET.fromstring(resp.content)
     except ET.ParseError as e:
-        logger.error(f"arXiv XML parse failed: {e}")
+        logger.error(f"[arxiv] XML parse failed: {e} (resp first 500: {resp.text[:500]!r})")
         return []
 
+    all_entries = root.findall("atom:entry", ATOM_NS)
     items: list[FetchedItem] = []
     cutoff = datetime.now(timezone.utc).timestamp() - days_back * 86400
+    skipped_old = 0
+    skipped_parse = 0
 
-    for entry in root.findall("atom:entry", ATOM_NS):
+    for entry in all_entries:
         item = _parse_entry(entry)
         if not item:
+            skipped_parse += 1
             continue
         if item.published_at and item.published_at.timestamp() < cutoff:
+            skipped_old += 1
             continue
         items.append(item)
 
-    logger.info(f"arXiv: {len(items)} items (within {days_back}d)")
+    logger.info(
+        f"[arxiv] entries={len(all_entries)} → kept={len(items)} "
+        f"(skipped_old={skipped_old}, parse_fail={skipped_parse}, cutoff={days_back}d)"
+    )
+    if not items and len(all_entries) == 0:
+        # API 가 응답은 줬는데 entries 0개 — query 형식 의심
+        logger.warning(
+            f"[arxiv] response had 0 entries — check query syntax. "
+            f"Response sample: {resp.text[:300]!r}"
+        )
     return items

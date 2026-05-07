@@ -48,13 +48,17 @@ def _is_real_repo(name: str) -> bool:
 
 
 async def _search_github_crawl4ai(query: str, max_results: int = 20) -> list[str]:
-    """Search GitHub repos via Google (site:github.com) — avoids GitHub login wall."""
+    """Search GitHub repos via Google (site:github.com) — avoids GitHub login wall.
+
+    주의: Google 이 봇 검출 시 captcha/빈 결과 반환. 그게 silent fail 의 주범.
+    """
     from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 
     search_url = (
         f"https://www.google.com/search?q=site:github.com+{quote_plus(query)}"
         f"&num={max_results * 2}"
     )
+    logger.info(f"[github] search URL: {search_url}")
 
     try:
         cfg = BrowserConfig(headless=True, verbose=False)
@@ -62,14 +66,17 @@ async def _search_github_crawl4ai(query: str, max_results: int = 20) -> list[str
         async with AsyncWebCrawler(config=cfg) as crawler:
             result = await crawler.arun(url=search_url, config=run_cfg)
             if not result.success:
-                logger.warning(f"GitHub search crawl failed: {result.error_message}")
+                logger.warning(f"[github] crawl failed: {result.error_message}")
                 return []
 
             links = result.links or {}
-            all_links = links.get("external", [])
+            external = links.get("external", []) or []
+            html_len = len(result.html or "") if hasattr(result, "html") else 0
+            md_len = len(result.markdown or "") if hasattr(result, "markdown") else 0
+
             repos = []
             seen = set()
-            for link in all_links:
+            for link in external:
                 href = link.get("href", "")
                 m = re.match(r"https?://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)", href)
                 if m:
@@ -80,25 +87,49 @@ async def _search_github_crawl4ai(query: str, max_results: int = 20) -> list[str
                 if len(repos) >= max_results:
                     break
 
+            logger.info(
+                f"[github] crawl ok: html={html_len}b, md={md_len}b, "
+                f"external_links={len(external)}, repos_extracted={len(repos)}"
+            )
+            if len(external) == 0 and html_len > 0:
+                # HTML 은 받았는데 external 링크 0 = Google 봇 검출 가능성 매우 높음
+                logger.warning(
+                    "[github] Google 응답에 external 링크 0 — 봇 검출/captcha 가능성. "
+                    "html 첫 300자: " + (result.html[:300] if hasattr(result, "html") and result.html else "<none>")
+                )
             return repos
     except Exception as e:
-        logger.warning(f"GitHub crawl search failed: {e}")
+        logger.warning(f"[github] crawl search exception: {type(e).__name__}: {e}")
         return []
 
 
 def _fetch_repo_info(full_name: str) -> dict | None:
-    """Fetch repo metadata via GitHub's public JSON (no auth needed)."""
+    """Fetch repo metadata via GitHub's public JSON (auth 옵션)."""
     try:
+        # GITHUB_TOKEN 있으면 rate limit 60→5000 으로 확장
+        from app.config import settings
+        headers = {"Accept": "application/vnd.github.v3+json"}
+        if getattr(settings, "github_token", None):
+            headers["Authorization"] = f"Bearer {settings.github_token}"
+
         r = httpx.get(
             f"https://api.github.com/repos/{full_name}",
             timeout=10,
-            headers={"Accept": "application/vnd.github.v3+json"},
+            headers=headers,
         )
         if r.status_code == 200:
             return r.json()
-        # Rate limited or not found — use basic info
+        # 진단 — 403 (rate limit) / 404 (not exist) 분리
+        if r.status_code in (403, 429):
+            logger.info(
+                f"[github] api {r.status_code} for {full_name} "
+                f"(rate-limit-remaining={r.headers.get('X-RateLimit-Remaining', '?')})"
+            )
+        elif r.status_code != 404:
+            logger.info(f"[github] api {r.status_code} for {full_name}: {r.text[:100]}")
         return None
-    except Exception:
+    except Exception as e:
+        logger.debug(f"[github] api error for {full_name}: {e}")
         return None
 
 

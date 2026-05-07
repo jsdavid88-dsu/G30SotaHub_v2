@@ -15,19 +15,34 @@ logger = logging.getLogger(__name__)
 
 
 def _get_reddit():
-    if not settings.reddit_client_id or not settings.reddit_client_secret:
+    cid = settings.reddit_client_id
+    csec = settings.reddit_client_secret
+    has_cid = bool(cid)
+    has_csec = bool(csec)
+    if not has_cid or not has_csec:
+        logger.warning(
+            f"[reddit] credentials missing — has_client_id={has_cid}, has_secret={has_csec}. "
+            f"Check REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET in .env"
+        )
         return None
     try:
         import praw  # noqa: WPS433
 
-        return praw.Reddit(
-            client_id=settings.reddit_client_id,
-            client_secret=settings.reddit_client_secret,
+        r = praw.Reddit(
+            client_id=cid,
+            client_secret=csec,
             user_agent=settings.reddit_user_agent,
             check_for_async=False,
         )
+        # 인증 검증 (read_only 면 application-only auth 통과)
+        try:
+            _ = r.read_only
+            logger.info(f"[reddit] PRAW init ok (read_only={r.read_only}, ua={settings.reddit_user_agent!r})")
+        except Exception as auth_e:
+            logger.warning(f"[reddit] PRAW init OK but auth verify failed: {auth_e}")
+        return r
     except Exception as e:
-        logger.warning(f"PRAW init failed: {e}")
+        logger.warning(f"[reddit] PRAW init failed: {type(e).__name__}: {e}")
         return None
 
 
@@ -41,21 +56,27 @@ def fetch_reddit(
     subreddits = subreddits or []
     keywords = keywords or []
     if not subreddits:
+        logger.info("[reddit] no subreddits provided — return []")
         return []
 
     reddit = _get_reddit()
     if not reddit:
-        logger.info("Reddit credentials missing — skipping source")
+        logger.info("[reddit] _get_reddit() returned None — skipping fetch")
         return []
 
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days_back)).timestamp()
     kw_lower = [k.lower() for k in keywords]
     items: list[FetchedItem] = []
+    per_sub_seen = 0
+    per_sub_kept = 0
 
     for sub_name in subreddits:
+        sub_seen = 0
+        sub_kept = 0
         try:
             sub = reddit.subreddit(sub_name)
             for post in sub.new(limit=max_per_sub):
+                sub_seen += 1
                 if post.created_utc < cutoff:
                     continue
 
@@ -82,9 +103,13 @@ def fetch_reddit(
                         },
                     )
                 )
+                sub_kept += 1
+            logger.info(f"[reddit] r/{sub_name}: scanned={sub_seen}, kept={sub_kept} (kw filter={len(kw_lower)})")
+            per_sub_seen += sub_seen
+            per_sub_kept += sub_kept
         except Exception as e:
-            logger.warning(f"Reddit sub '{sub_name}' fetch failed: {e}")
+            logger.warning(f"[reddit] r/{sub_name} fetch failed: {type(e).__name__}: {e}")
             continue
 
-    logger.info(f"Reddit: {len(items)} posts")
+    logger.info(f"[reddit] total: scanned={per_sub_seen}, kept={per_sub_kept} from {len(subreddits)} subs")
     return items
