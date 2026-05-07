@@ -1,3 +1,5 @@
+// VFX Dashboard — Hub design language 따름.
+// inline style + var(--color-*) + Noto Serif KR 헤딩 + 16px radius + 미묘한 shadow.
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -16,62 +18,89 @@ import CategorySection from "../components/CategorySection";
 import ItemCard from "../components/ItemCard";
 import { dedup } from "../utils/dedup";
 
-// Hub 디자인 토큰 활용 (--color-card / --color-text-primary 등)
+// ─── Hub design tokens (inline) ───
+const cardStyle: React.CSSProperties = {
+  background: "var(--color-card)",
+  border: "1px solid var(--color-border)",
+  borderRadius: "16px",
+  boxShadow: "0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)",
+};
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  color,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string | number;
-  color: string; // tailwind color e.g. "indigo" / "emerald" / "rose" / "amber"
+const sectionHeaderStyle: React.CSSProperties = {
+  padding: "20px 28px",
+  borderBottom: "1px solid #f1f5f9",
+};
+
+const sectionTitleStyle: React.CSSProperties = {
+  fontWeight: 600,
+  fontSize: "17px",
+  color: "var(--color-text-primary)",
+};
+
+const sectionSubtitleStyle: React.CSSProperties = {
+  fontSize: "13px",
+  color: "var(--color-text-muted)",
+  marginTop: "4px",
+};
+
+const btnPrimary: React.CSSProperties = {
+  display: "inline-flex", alignItems: "center", gap: 6,
+  padding: "8px 14px", borderRadius: 10, fontSize: 13, fontWeight: 600,
+  background: "var(--color-accent)", color: "#fff",
+  border: "none", cursor: "pointer",
+  transition: "all 0.15s",
+};
+
+const btnSecondary: React.CSSProperties = {
+  display: "inline-flex", alignItems: "center", gap: 6,
+  padding: "8px 14px", borderRadius: 10, fontSize: 13, fontWeight: 500,
+  background: "#fff", color: "var(--color-text-secondary)",
+  border: "1px solid var(--color-border)", cursor: "pointer",
+  transition: "all 0.15s",
+};
+
+// ─── StatCard (Hub style) ───
+function StatCard({ icon: Icon, label, value, accentBg, accentColor }: {
+  icon: React.ElementType; label: string; value: string | number;
+  accentBg: string; accentColor: string;
 }) {
-  const ringMap: Record<string, string> = {
-    indigo: "bg-indigo-50 text-indigo-600",
-    emerald: "bg-emerald-50 text-emerald-600",
-    rose: "bg-rose-50 text-rose-600",
-    amber: "bg-amber-50 text-amber-600",
-  };
   return (
-    <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm hover:shadow-md transition">
-      <div className={`inline-flex rounded-xl p-2.5 ${ringMap[color] ?? ringMap.indigo}`}>
-        <Icon className="h-5 w-5" />
+    <div style={{ ...cardStyle, padding: "20px 24px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: 10,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: accentBg,
+        }}>
+          <Icon style={{ width: 20, height: 20, color: accentColor }} />
+        </div>
       </div>
-      <div className="mt-4">
-        <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">{label}</div>
-        <div className="text-3xl font-bold text-slate-900 mt-1 tabular-nums">{value}</div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 30, fontWeight: 700, color: "var(--color-text-primary)", marginTop: 4, fontVariantNumeric: "tabular-nums" }}>
+        {value}
       </div>
     </div>
   );
 }
 
-// ============================================================================
-// AdminToolbar
-// ============================================================================
+// ─── AdminToolbar ───
 function AdminToolbar() {
   const qc = useQueryClient();
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   const run = async (label: string, fn: () => Promise<unknown>) => {
-    setBusy(label);
-    setMsg(null);
+    setBusy(label); setMsg(null);
     try {
       await fn();
       setMsg(`${label} 완료 — 1-2분 후 새로고침`);
-      setTimeout(() => {
-        qc.invalidateQueries();
-        setMsg(null);
-      }, 5000);
+      setTimeout(() => { qc.invalidateQueries(); setMsg(null); }, 5000);
     } catch (e) {
       setMsg(`에러: ${e instanceof Error ? e.message : String(e)}`);
       setTimeout(() => setMsg(null), 5000);
-    } finally {
-      setBusy(null);
-    }
+    } finally { setBusy(null); }
   };
 
   const Btn = ({ icon: Icon, label, onClick, primary = false }: {
@@ -80,32 +109,26 @@ function AdminToolbar() {
     <button
       onClick={onClick}
       disabled={busy !== null}
-      className={
-        primary
-          ? "flex items-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 text-sm font-medium shadow-sm shadow-indigo-600/20 disabled:opacity-50 transition"
-          : "flex items-center gap-2 rounded-lg bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2 text-sm font-medium disabled:opacity-50 transition"
-      }
+      style={{ ...(primary ? btnPrimary : btnSecondary), opacity: busy !== null ? 0.5 : 1 }}
     >
-      {busy === label ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
+      {busy === label ? <Loader2 style={{ width: 14, height: 14, animation: "spin 1s linear infinite" }} /> : <Icon style={{ width: 14, height: 14 }} />}
       {label}
     </button>
   );
 
   return (
-    <div className="flex flex-col items-end gap-2">
-      <div className="flex items-center gap-2">
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8 }}>
         <Btn icon={RefreshCw} label="전체 수집" onClick={() => run("전체 수집", triggerCrawlAll)} primary />
         <Btn icon={Link2} label="코드 링크" onClick={() => run("코드 링크", triggerLinkCodes)} />
         <Btn icon={GitBranch} label="계보 빌드" onClick={() => run("계보 빌드", triggerBuildLineage)} />
       </div>
-      {msg && <div className="text-xs text-slate-500">{msg}</div>}
+      {msg && <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>{msg}</div>}
     </div>
   );
 }
 
-// ============================================================================
-// AddCategoryModal
-// ============================================================================
+// ─── AddCategoryModal ───
 function AddCategoryModal({ open, onClose, onCreated }: {
   open: boolean; onClose: () => void; onCreated: () => void;
 }) {
@@ -118,63 +141,80 @@ function AddCategoryModal({ open, onClose, onCreated }: {
   const [err, setErr] = useState<string | null>(null);
 
   const submit = async () => {
-    if (!slug || !nameKo || !nameEn) {
-      setErr("slug, 한글명, 영문명 필수");
-      return;
-    }
-    setBusy(true);
-    setErr(null);
+    if (!slug || !nameKo || !nameEn) { setErr("slug, 한글명, 영문명 필수"); return; }
+    setBusy(true); setErr(null);
     try {
       await createCategory({ slug, name_ko: nameKo, name_en: nameEn, icon, description });
-      onCreated();
-      onClose();
+      onCreated(); onClose();
       setSlug(""); setNameKo(""); setNameEn(""); setIcon(""); setDescription("");
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   };
 
   if (!open) return null;
+  const inputStyle: React.CSSProperties = {
+    width: "100%", padding: "10px 14px", borderRadius: 10,
+    border: "1px solid var(--color-border)", fontSize: 14,
+    background: "#fff", color: "var(--color-text-primary)",
+    outline: "none", transition: "border-color 0.15s",
+  };
+  const labelStyle: React.CSSProperties = {
+    display: "block", fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)", marginBottom: 6,
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="rounded-2xl bg-white border border-slate-200 p-6 w-full max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-xl font-semibold text-slate-900 mb-5">카테고리 추가</h3>
-        <div className="space-y-4">
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, zIndex: 50,
+      background: "rgba(15,23,42,0.5)", backdropFilter: "blur(4px)",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        ...cardStyle, padding: 28, width: "100%", maxWidth: 480,
+        boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)",
+      }}>
+        <h3 style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 20 }}>
+          카테고리 추가
+        </h3>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1.5">slug (영문, _)</label>
-            <input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="motion_capture"
-              className="w-full px-3.5 py-2 rounded-lg border border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition" />
+            <label style={labelStyle}>slug (영문, _)</label>
+            <input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="motion_capture" style={inputStyle} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">한글명</label>
-              <input value={nameKo} onChange={(e) => setNameKo(e.target.value)} placeholder="모션 캡처"
-                className="w-full px-3.5 py-2 rounded-lg border border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition" />
+              <label style={labelStyle}>한글명</label>
+              <input value={nameKo} onChange={(e) => setNameKo(e.target.value)} placeholder="모션 캡처" style={inputStyle} />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">English</label>
-              <input value={nameEn} onChange={(e) => setNameEn(e.target.value)} placeholder="Motion Capture"
-                className="w-full px-3.5 py-2 rounded-lg border border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition" />
+              <label style={labelStyle}>English</label>
+              <input value={nameEn} onChange={(e) => setNameEn(e.target.value)} placeholder="Motion Capture" style={inputStyle} />
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1.5">아이콘 (이모지)</label>
-            <input value={icon} onChange={(e) => setIcon(e.target.value)} placeholder="🎬"
-              className="w-full px-3.5 py-2 rounded-lg border border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition" />
+            <label style={labelStyle}>아이콘 (이모지)</label>
+            <input value={icon} onChange={(e) => setIcon(e.target.value)} placeholder="🎬" style={inputStyle} />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1.5">설명 (선택)</label>
+            <label style={labelStyle}>설명 (선택)</label>
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2}
-              className="w-full px-3.5 py-2 rounded-lg border border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition resize-none" />
+              style={{ ...inputStyle, resize: "none", fontFamily: "inherit" }} />
           </div>
-          {err && <div className="rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-sm text-rose-700">{err}</div>}
+          {err && (
+            <div style={{
+              padding: "10px 14px", borderRadius: 10,
+              background: "var(--color-danger-light)", color: "var(--color-danger)",
+              fontSize: 13,
+            }}>{err}</div>
+          )}
         </div>
-        <div className="flex justify-end gap-2 mt-6">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900">취소</button>
-          <button onClick={submit} disabled={busy}
-            className="px-5 py-2 text-sm font-medium rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm shadow-indigo-600/20 disabled:opacity-50">
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 24 }}>
+          <button onClick={onClose} style={{
+            padding: "8px 14px", borderRadius: 10, fontSize: 13, fontWeight: 500,
+            background: "transparent", color: "var(--color-text-secondary)",
+            border: "none", cursor: "pointer",
+          }}>취소</button>
+          <button onClick={submit} disabled={busy} style={{ ...btnPrimary, opacity: busy ? 0.5 : 1 }}>
             {busy ? "추가 중..." : "추가"}
           </button>
         </div>
@@ -183,38 +223,48 @@ function AddCategoryModal({ open, onClose, onCreated }: {
   );
 }
 
-// ============================================================================
-// EmptyState
-// ============================================================================
+// ─── EmptyState ───
 function EmptyState() {
+  const subCardStyle: React.CSSProperties = {
+    padding: 20, borderRadius: 12, background: "#f8fafc",
+    border: "1px solid var(--color-border)",
+  };
   return (
-    <div className="rounded-2xl bg-white border-2 border-dashed border-slate-200 p-8">
-      <div className="flex items-center gap-4 mb-5">
-        <div className="rounded-2xl bg-indigo-50 p-3 flex-shrink-0">
-          <Sparkles className="h-7 w-7 text-indigo-500" />
+    <div style={{ ...cardStyle, padding: 32, borderStyle: "dashed", borderWidth: 2 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
+        <div style={{
+          width: 56, height: 56, borderRadius: 14,
+          background: "var(--color-accent-light)",
+          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+        }}>
+          <Sparkles style={{ width: 28, height: 28, color: "var(--color-accent)" }} />
         </div>
         <div>
-          <h3 className="text-lg font-semibold text-slate-900">아직 수집된 모델이 없습니다</h3>
-          <p className="text-sm text-slate-500 mt-0.5">분야는 준비됐어요. 두 가지 방법 중 하나로 채울 수 있습니다.</p>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
-          <div className="flex items-center gap-2 mb-2">
-            <Zap className="h-4 w-4 text-amber-600" />
-            <div className="font-semibold text-sm text-slate-900">A. 새로 크롤</div>
-          </div>
-          <p className="text-xs text-slate-600 leading-relaxed">
-            우상단 <span className="font-medium text-indigo-600">[전체 수집]</span> 클릭. arxiv / GitHub / HF / Reddit / X 에서 5-10분 내 채워짐.
+          <h3 style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 600, color: "var(--color-text-primary)" }}>
+            아직 수집된 모델이 없습니다
+          </h3>
+          <p style={{ fontSize: 14, color: "var(--color-text-muted)", marginTop: 4 }}>
+            분야는 준비됐어요. 두 가지 방법 중 하나로 채울 수 있습니다.
           </p>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
-          <div className="flex items-center gap-2 mb-2">
-            <Database className="h-4 w-4 text-indigo-600" />
-            <div className="font-semibold text-sm text-slate-900">B. 원본 마이그레이션</div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div style={subCardStyle}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <Zap style={{ width: 16, height: 16, color: "var(--color-warning)" }} />
+            <div style={{ fontWeight: 600, fontSize: 14, color: "var(--color-text-primary)" }}>A. 새로 크롤</div>
           </div>
-          <p className="text-xs text-slate-600 leading-relaxed">
-            <code className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px]">scripts/migrate_vfx_sqlite.py</code> 실행 → 68 items + 210 feeds 즉시 복원.
+          <p style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
+            우상단 <span style={{ fontWeight: 600, color: "var(--color-accent)" }}>[전체 수집]</span> 클릭. arxiv / GitHub / HF / Reddit / X 에서 5-10분 내 채워짐.
+          </p>
+        </div>
+        <div style={subCardStyle}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <Database style={{ width: 16, height: 16, color: "var(--color-accent)" }} />
+            <div style={{ fontWeight: 600, fontSize: 14, color: "var(--color-text-primary)" }}>B. 원본 마이그레이션</div>
+          </div>
+          <p style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
+            <code style={{ background: "#e2e8f0", padding: "2px 6px", borderRadius: 4, fontSize: 11 }}>scripts/migrate_vfx_sqlite.py</code> 실행 → 68 items + 210 feeds 즉시 복원.
           </p>
         </div>
       </div>
@@ -222,17 +272,14 @@ function EmptyState() {
   );
 }
 
-// ============================================================================
+// ════════════════════════════════════════
 // Dashboard
-// ============================================================================
+// ════════════════════════════════════════
 export default function Dashboard() {
   const qc = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
 
-  const { data: categories = [] } = useQuery({
-    queryKey: ["categories"],
-    queryFn: fetchCategories,
-  });
+  const { data: categories = [] } = useQuery({ queryKey: ["categories"], queryFn: fetchCategories });
   const { data: summary } = useQuery({ queryKey: ["summary"], queryFn: fetchSummary });
   const { data: p0Raw = [] } = useQuery({
     queryKey: ["items", { priority: "P0" }],
@@ -259,14 +306,16 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-8">
-      {/* 헤딩 */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+    <div style={{ width: "100%" }}>
+      {/* Greeting (Hub Dashboard 패턴) */}
+      <div style={{ marginBottom: 32, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">VFX SOTA 대시보드</h1>
-          <p className="text-base text-slate-500 mt-1.5">
+          <h1 style={{ fontSize: 26, fontWeight: 600, color: "var(--color-text-primary)", fontFamily: "var(--font-display)" }}>
+            VFX SOTA 대시보드
+          </h1>
+          <p style={{ color: "var(--color-text-muted)", fontSize: 15, marginTop: 6, lineHeight: 1.5 }}>
             VFX 관련 AI SOTA 실시간 추적 · 마지막 업데이트{" "}
-            <span className="text-slate-700 font-medium">
+            <span style={{ color: "var(--color-text-secondary)", fontWeight: 500 }}>
               {summary?.last_crawl ? new Date(summary.last_crawl).toLocaleString("ko-KR") : "—"}
             </span>
           </p>
@@ -275,78 +324,70 @@ export default function Dashboard() {
       </div>
 
       {/* 통계 카드 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard icon={TrendingUp} label="전체 추적" value={summary?.total_items ?? "—"} color="indigo" />
-        <StatCard icon={Sparkles} label="이번 주 신규" value={summary?.new_this_week ?? "—"} color="emerald" />
-        <StatCard icon={AlertCircle} label="P0 긴급" value={summary?.p0_count ?? "—"} color="rose" />
-        <StatCard icon={Clock} label="P1 중요" value={summary?.p1_count ?? "—"} color="amber" />
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+        gap: 16, marginBottom: 32,
+      }}>
+        <StatCard icon={TrendingUp} label="전체 추적" value={summary?.total_items ?? "—"}
+          accentBg="var(--color-accent-light)" accentColor="var(--color-accent)" />
+        <StatCard icon={Sparkles} label="이번 주 신규" value={summary?.new_this_week ?? "—"}
+          accentBg="var(--color-success-light)" accentColor="var(--color-success)" />
+        <StatCard icon={AlertCircle} label="P0 긴급" value={summary?.p0_count ?? "—"}
+          accentBg="var(--color-danger-light)" accentColor="var(--color-danger)" />
+        <StatCard icon={Clock} label="P1 중요" value={summary?.p1_count ?? "—"}
+          accentBg="var(--color-warning-light)" accentColor="var(--color-warning)" />
       </div>
 
-      {/* 분야 카드 grid */}
-      <section>
-        <div className="flex items-center justify-between mb-5">
+      {/* 분야 섹션 — Hub section pattern */}
+      <div style={{ ...cardStyle, marginBottom: 24, overflow: "hidden" }}>
+        <div style={{ ...sectionHeaderStyle, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div>
-            <h2 className="text-xl font-semibold text-slate-900">
-              분야 <span className="text-slate-400 font-normal">({categories.length})</span>
-            </h2>
-            <p className="text-sm text-slate-500 mt-1">VFX 추적 분야 — 클릭하면 분야별 모델 모음</p>
+            <div style={sectionTitleStyle}>
+              분야 <span style={{ color: "var(--color-text-muted)", fontWeight: 400 }}>({categories.length})</span>
+            </div>
+            <div style={sectionSubtitleStyle}>VFX 추적 분야 — 클릭하면 분야별 모델 모음</div>
           </div>
-          <button
-            onClick={() => setAddOpen(true)}
-            className="flex items-center gap-1.5 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 px-4 py-2 text-sm font-medium text-slate-700 hover:text-indigo-700 transition"
-          >
-            <Plus className="h-4 w-4" />
+          <button onClick={() => setAddOpen(true)} style={btnSecondary}>
+            <Plus style={{ width: 14, height: 14 }} />
             카테고리 추가
           </button>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div style={{
+          padding: "20px 28px",
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+          gap: 12,
+        }}>
           {sortedCategories.map((cat) => (
-            <div key={cat.slug} className="group relative">
-              <Link
-                to={`/vfx/category/${cat.slug}`}
-                className="flex flex-col items-center justify-center rounded-2xl bg-white border border-slate-200 hover:border-indigo-400 hover:shadow-md hover:-translate-y-0.5 px-4 py-6 transition-all"
-              >
-                <span className="text-3xl mb-2.5">{cat.icon || "📂"}</span>
-                <span className="text-sm font-semibold text-slate-900 text-center">{cat.name_ko}</span>
-                <span className="text-xs text-slate-500 mt-1.5 tabular-nums">{cat.item_count} 모델</span>
-              </Link>
-              <button
-                onClick={() => onDelete(cat.slug, cat.name_ko)}
-                title="삭제"
-                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1.5 rounded-md bg-white border border-slate-200 text-slate-400 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 transition"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
+            <CategoryCard key={cat.slug} cat={cat} onDelete={onDelete} />
           ))}
         </div>
-      </section>
+      </div>
 
       {/* 빈 상태 */}
       {isEmpty && <EmptyState />}
 
       {/* P0 긴급 */}
       {p0Items.length > 0 && (
-        <section>
-          <h2 className="text-lg font-semibold text-rose-600 mb-4 flex items-center gap-2">
-            <AlertCircle className="h-5 w-5" />
-            긴급 (P0)
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {p0Items.slice(0, 5).map((item) => (
-              <ItemCard
-                key={item.id}
-                item={item}
-                groupSources={item.group_id ? p0Groups.get(item.group_id) : undefined}
-              />
+        <div style={{ ...cardStyle, marginTop: 24, overflow: "hidden" }}>
+          <div style={sectionHeaderStyle}>
+            <div style={{ ...sectionTitleStyle, color: "var(--color-danger)", display: "flex", alignItems: "center", gap: 8 }}>
+              <AlertCircle style={{ width: 18, height: 18 }} />
+              긴급 (P0)
+            </div>
+          </div>
+          <div style={{ padding: "20px 28px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
+            {p0Items.slice(0, 6).map((item) => (
+              <ItemCard key={item.id} item={item} groupSources={item.group_id ? p0Groups.get(item.group_id) : undefined} />
             ))}
           </div>
-        </section>
+        </div>
       )}
 
-      {/* 활성 카테고리 */}
+      {/* 활성 카테고리들 */}
       {activeCategories.length > 0 && (
-        <div className="space-y-6">
+        <div style={{ marginTop: 24, display: "flex", flexDirection: "column", gap: 24 }}>
           {activeCategories.map((cat) => (
             <CategorySection key={cat.slug} category={cat} />
           ))}
@@ -358,6 +399,59 @@ export default function Dashboard() {
         onClose={() => setAddOpen(false)}
         onCreated={() => qc.invalidateQueries({ queryKey: ["categories"] })}
       />
+
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
+    </div>
+  );
+}
+
+function CategoryCard({ cat, onDelete }: { cat: any; onDelete: (slug: string, name: string) => void }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <div
+      style={{ position: "relative" }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      <Link
+        to={`/vfx/category/${cat.slug}`}
+        style={{
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          padding: "20px 12px", borderRadius: 12,
+          border: `1px solid ${hover ? "var(--color-accent)" : "var(--color-border)"}`,
+          background: "#fff",
+          textDecoration: "none",
+          boxShadow: hover ? "0 4px 12px rgba(79,70,229,0.12)" : "none",
+          transform: hover ? "translateY(-2px)" : "none",
+          transition: "all 0.18s",
+        }}
+      >
+        <span style={{ fontSize: 28, marginBottom: 8 }}>{cat.icon || "📂"}</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", textAlign: "center" }}>
+          {cat.name_ko}
+        </span>
+        <span style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 4, fontVariantNumeric: "tabular-nums" }}>
+          {cat.item_count} 모델
+        </span>
+      </Link>
+      {hover && (
+        <button
+          onClick={() => onDelete(cat.slug, cat.name_ko)}
+          title="삭제"
+          style={{
+            position: "absolute", top: 6, right: 6,
+            width: 24, height: 24, borderRadius: 6,
+            border: "1px solid var(--color-border)",
+            background: "#fff", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: "var(--color-text-muted)",
+          }}
+        >
+          <X style={{ width: 12, height: 12 }} />
+        </button>
+      )}
     </div>
   );
 }
