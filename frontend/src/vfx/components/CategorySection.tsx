@@ -5,16 +5,23 @@ import { ChevronRight } from "lucide-react";
 import { fetchItems } from "../api/items";
 import type { Category } from "../types";
 import ItemCard from "./ItemCard";
+import ItemTable from "./ItemTable";
+import ViewToggle from "./ViewToggle";
+import { useViewMode } from "../utils/viewMode";
 import { dedup } from "../utils/dedup";
 import { cardStyle, sectionHeaderStyle, badgeStyle } from "../design";
 
 export default function CategorySection({ category }: { category: Category }) {
+  const [viewMode] = useViewMode();
+  // table 모드면 좀 더 많이 가져와서 한 번에 보여줌
+  const limit = viewMode === "table" ? 30 : 12;
+
   const { data: rawItems = [] } = useQuery({
-    queryKey: ["items", "category-section", category.slug],
-    queryFn: () => fetchItems({ category: category.slug, sort: "discovered", limit: 12 }),
+    queryKey: ["items", "category-section", category.slug, viewMode],
+    queryFn: () => fetchItems({ category: category.slug, sort: "published", limit }),
   });
   const { deduped, groupSources } = useMemo(() => dedup(rawItems), [rawItems]);
-  const items = deduped.slice(0, 6);
+  const items = viewMode === "table" ? deduped : deduped.slice(0, 6);
 
   if (items.length === 0 && category.item_count === 0) return null;
 
@@ -62,6 +69,8 @@ export default function CategorySection({ category }: { category: Category }) {
           }}>
             수집된 아이템이 없습니다
           </div>
+        ) : viewMode === "table" ? (
+          <ItemTable items={items} sortKey="published_at" sortDir="desc" />
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
             {items.map((item) => (
@@ -77,3 +86,6 @@ export default function CategorySection({ category }: { category: Category }) {
     </section>
   );
 }
+
+// 다른 곳에서 호환 위해 ViewToggle 도 re-export (이전 import 깨짐 회피)
+export { ViewToggle };

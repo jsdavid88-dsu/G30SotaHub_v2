@@ -1,10 +1,28 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ExternalLink, Star, Github } from "lucide-react";
+import { ExternalLink, Star, Github, UserCheck } from "lucide-react";
 import type { Item } from "../types";
 import { getCodeLinks, getArcaVerdict } from "../utils/metadata";
 import SourceBadge from "./SourceBadge";
 import PriorityBadge from "./PriorityBadge";
+
+const ASSIGN_STATUS_COLOR: Record<string, { bg: string; color: string; label: string }> = {
+  recommended: { bg: "#f0fdf4", color: "#15803d", label: "추천" },
+  assigned:    { bg: "#e0e7ff", color: "#4338ca", label: "배정됨" },
+  in_review:   { bg: "#fef3c7", color: "#b45309", label: "리뷰중" },
+  submitted:   { bg: "#dbeafe", color: "#1d4ed8", label: "제출" },
+  approved:    { bg: "#d1fae5", color: "#047857", label: "승인" },
+  rejected:    { bg: "#fee2e2", color: "#dc2626", label: "반려" },
+};
+
+function formatDate(d: string | null | undefined): string | null {
+  if (!d) return null;
+  try {
+    return new Date(d).toLocaleDateString("ko-KR", { year: "2-digit", month: "2-digit", day: "2-digit" });
+  } catch {
+    return null;
+  }
+}
 
 export default function ItemCard({
   item,
@@ -18,6 +36,11 @@ export default function ItemCard({
   const codeLinks = getCodeLinks(item);
   const verdict = getArcaVerdict(item);
   const otherSources = groupSources?.filter((s) => s !== item.source) ?? [];
+
+  const publishedStr = formatDate(item.published_at);
+  const discoveredStr = formatDate(item.discovered_at);
+  const assignments = item.assignments ?? [];
+  const activeAssignment = assignments.find((a) => a.status !== "approved" && a.status !== "rejected") ?? assignments[0];
 
   return (
     <Link
@@ -76,13 +99,13 @@ export default function ItemCard({
         }}>
           💭 {verdict}
         </p>
-      ) : item.abstract ? (
+      ) : (item.description || item.abstract) ? (
         <p style={{
           fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 8,
           display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
           lineHeight: 1.5,
         }}>
-          {item.abstract}
+          {item.description || item.abstract}
         </p>
       ) : null}
 
@@ -114,10 +137,42 @@ export default function ItemCard({
         </div>
       )}
 
-      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--color-text-muted)" }}>
-        <span>{new Date(item.discovered_at).toLocaleDateString("ko-KR")}</span>
+      {/* 날짜 — published_at 우선 (사용자 요청), 없으면 discovered_at fallback */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--color-text-muted)", flexWrap: "wrap" }}>
+        {publishedStr ? (
+          <span title={`발표일${discoveredStr ? ` · 발견 ${discoveredStr}` : ""}`}>
+            <span style={{ fontWeight: 600, color: "var(--color-text-secondary)" }}>발표</span> {publishedStr}
+          </span>
+        ) : discoveredStr ? (
+          <span title="발표일 정보 없음 — 발견일 표시">
+            <span style={{ opacity: 0.7 }}>발견</span> {discoveredStr}
+          </span>
+        ) : null}
         {item.category_slugs.length > 0 && <span>· {item.category_slugs.join(", ")}</span>}
       </div>
+
+      {/* 학생 배정 — 있을 때만 */}
+      {activeAssignment && (
+        <div style={{
+          marginTop: 8, paddingTop: 8, borderTop: "1px solid #f1f5f9",
+          display: "flex", alignItems: "center", gap: 6, fontSize: 11,
+        }}>
+          <UserCheck style={{ width: 11, height: 11, color: "var(--color-text-muted)" }} />
+          <span style={{ color: "var(--color-text-secondary)", fontWeight: 500 }}>
+            {activeAssignment.assignee_name || "—"}
+          </span>
+          <span style={{
+            padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 600,
+            background: ASSIGN_STATUS_COLOR[activeAssignment.status]?.bg ?? "#f1f5f9",
+            color: ASSIGN_STATUS_COLOR[activeAssignment.status]?.color ?? "#64748b",
+          }}>
+            {ASSIGN_STATUS_COLOR[activeAssignment.status]?.label ?? activeAssignment.status}
+          </span>
+          {assignments.length > 1 && (
+            <span style={{ color: "var(--color-text-muted)", fontSize: 10 }}>+{assignments.length - 1}</span>
+          )}
+        </div>
+      )}
     </Link>
   );
 }

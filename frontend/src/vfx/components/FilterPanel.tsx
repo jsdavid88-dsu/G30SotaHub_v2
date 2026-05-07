@@ -26,9 +26,10 @@ const PRIORITIES = [
 ];
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: "published", label: "발표일 최신순" },
+  { value: "published_asc", label: "발표일 오래된순" },
   { value: "discovered", label: "발견 최신순" },
   { value: "discovered_asc", label: "발견 오래된순" },
-  { value: "published", label: "게시 최신순" },
   { value: "score", label: "LLM 점수순" },
   { value: "keyword_score", label: "키워드 점수순" },
   { value: "priority", label: "우선순위순" },
@@ -67,7 +68,7 @@ export default function FilterPanel({ filters, onChange, showCategory = false, c
           {categories.map((c) => <option key={c.slug} value={c.slug}>{c.name_ko}</option>)}
         </select>
       )}
-      <select style={selectStyle} value={filters.sort ?? "discovered"} onChange={(e) => set("sort", e.target.value as SortKey)}>
+      <select style={selectStyle} value={filters.sort ?? "published"} onChange={(e) => set("sort", e.target.value as SortKey)}>
         {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
       <input

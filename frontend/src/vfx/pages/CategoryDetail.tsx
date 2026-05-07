@@ -1,17 +1,35 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft } from "lucide-react";
 import { fetchCategory } from "../api/categories";
-import { fetchItems, type ItemFilters } from "../api/items";
+import { fetchItems, type ItemFilters, type SortKey as ApiSortKey } from "../api/items";
 import ItemCard from "../components/ItemCard";
+import ItemTable, { type SortKey as TableSortKey, type SortDir } from "../components/ItemTable";
 import FilterPanel from "../components/FilterPanel";
+import ViewToggle from "../components/ViewToggle";
+import { useViewMode } from "../utils/viewMode";
 import { dedup } from "../utils/dedup";
 import { cardStyle, sectionHeaderStyle, sectionTitleStyle, badgeStyle, btnGhost } from "../design";
 
+// table 컬럼 클릭 시 backend sort 키로 변환
+const TABLE_SORT_TO_API: Record<TableSortKey, ApiSortKey | null> = {
+  title: null,           // backend 미지원 — client-side
+  source: null,          // client-side
+  published_at: "published",
+  discovered_at: "discovered",
+  priority: "priority",
+  score: "score",
+  assignee: null,        // client-side
+  lifecycle: null,       // client-side
+};
+
 export default function CategoryDetail() {
   const { slug } = useParams<{ slug: string }>();
-  const [filters, setFilters] = useState<ItemFilters>({ sort: "discovered" });
+  // default 정렬을 'published' 로 (사용자 요청 — 발표일 우선)
+  const [filters, setFilters] = useState<ItemFilters>({ sort: "published" });
+  const [viewMode] = useViewMode();
+  const [tableSort, setTableSort] = useState<{ key: TableSortKey; dir: SortDir }>({ key: "published_at", dir: "desc" });
 
   const { data: category } = useQuery({
     queryKey: ["category", slug],
@@ -24,6 +42,56 @@ export default function CategoryDetail() {
     enabled: !!slug,
   });
   const { deduped: items, groupSources } = useMemo(() => dedup(rawItems), [rawItems]);
+
+  // table 컬럼 헤더 클릭 처리
+  const handleTableSort = useCallback((key: TableSortKey) => {
+    const apiKey = TABLE_SORT_TO_API[key];
+    setTableSort((prev) => {
+      const sameKey = prev.key === key;
+      const nextDir: SortDir = sameKey && prev.dir === "desc" ? "asc" : "desc";
+      // backend 가 지원하는 키면 server-sort, 아니면 client-sort 만 (현재는 server 만 처리)
+      if (apiKey) {
+        const apiSort: ApiSortKey =
+          key === "published_at" && nextDir === "asc" ? "discovered_asc" :  // backend 에 published_asc 가 없음 — fallback
+          key === "discovered_at" && nextDir === "asc" ? "discovered_asc" :
+          apiKey;
+        // 단, backend 의 published 정렬은 desc 만 있음. asc 면 client-side 보강 필요.
+        // 일단 단순화: published_at + asc = published 그대로 + client reverse
+        setFilters((f) => ({ ...f, sort: apiSort }));
+      }
+      return { key, dir: nextDir };
+    });
+  }, []);
+
+  // client-side 보조 정렬 (asc 또는 backend 미지원 컬럼)
+  const sortedItems = useMemo(() => {
+    if (viewMode !== "table") return items;
+    const arr = [...items];
+    const { key, dir } = tableSort;
+    const mul = dir === "asc" ? 1 : -1;
+    arr.sort((a, b) => {
+      let av: any, bv: any;
+      switch (key) {
+        case "title": av = a.title.toLowerCase(); bv = b.title.toLowerCase(); break;
+        case "source": av = a.source; bv = b.source; break;
+        case "published_at": av = a.published_at ? new Date(a.published_at).getTime() : 0; bv = b.published_at ? new Date(b.published_at).getTime() : 0; break;
+        case "discovered_at": av = new Date(a.discovered_at).getTime(); bv = new Date(b.discovered_at).getTime(); break;
+        case "priority": av = a.priority ?? "Z"; bv = b.priority ?? "Z"; break;
+        case "score": av = a.llm_score || a.keyword_score; bv = b.llm_score || b.keyword_score; break;
+        case "assignee": {
+          const aa = (a.assignments?.[0]?.assignee_name) ?? "";
+          const bb = (b.assignments?.[0]?.assignee_name) ?? "";
+          av = aa; bv = bb; break;
+        }
+        case "lifecycle": av = a.lifecycle_status ?? ""; bv = b.lifecycle_status ?? ""; break;
+        default: av = 0; bv = 0;
+      }
+      if (av < bv) return -1 * mul;
+      if (av > bv) return 1 * mul;
+      return 0;
+    });
+    return arr;
+  }, [items, tableSort, viewMode]);
 
   if (!category) return <div style={{ color: "var(--color-text-muted)" }}>Loading...</div>;
 
@@ -83,12 +151,13 @@ export default function CategoryDetail() {
       </div>
 
       <div style={{ ...cardStyle, overflow: "hidden" }}>
-        <div style={sectionHeaderStyle}>
+        <div style={{ ...sectionHeaderStyle, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div style={sectionTitleStyle}>
             발견 이력 <span style={{ color: "var(--color-text-muted)", fontWeight: 400 }}>({items.length})</span>
           </div>
+          <ViewToggle />
         </div>
-        <div style={{ padding: 20 }}>
+        <div style={{ padding: viewMode === "table" ? 16 : 20 }}>
           {items.length === 0 ? (
             <div style={{
               padding: 32, textAlign: "center", fontSize: 13,
@@ -97,6 +166,13 @@ export default function CategoryDetail() {
             }}>
               조건에 맞는 아이템이 없습니다
             </div>
+          ) : viewMode === "table" ? (
+            <ItemTable
+              items={sortedItems}
+              sortKey={tableSort.key}
+              sortDir={tableSort.dir}
+              onSort={handleTableSort}
+            />
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
               {items.map((item) => (
