@@ -24,11 +24,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import SessionLocal
 from app.models import Item, ItemCategory, FeedItem, Submission, CategorySuggestion
+from app import run_state
 
 logger = logging.getLogger(__name__)
 
 PROMOTION_THRESHOLD = 5
-SCORE_BATCH_SIZE = 5
+# Issue #6 fix (2026-05-07): 5 → 3. 한 batch 실패 시 손실 최소화 + thinking 토큰 여유
+SCORE_BATCH_SIZE = 3
 
 
 # ── Step 1: Submissions ─────────────────────────────────────
@@ -355,36 +357,55 @@ async def run_night_batch() -> list[dict]:
     3. Score unscored items (Gemma4)
     4. Grouper
     5. Category promotion (Gemma4)
+
+    각 단계마다 run_state.update() 로 UI 진행 상황 표시.
     """
     logger.info("========== Night Batch Started ==========")
     results = []
+    TOTAL_STEPS = 6
 
     # Step 0: Fresh crawl
+    run_state.update(stage="0/6 자동 수집 (arxiv/github/hf/reddit)", progress=0.05)
     r = await step_crawl_all_sources()
     results.append(r)
+    run_state.update(detail=f"수집: 연구 {r.get('research_new', 0)} + 피드 {r.get('feed_new', 0)}", progress=0.18)
 
-    # Step 1: Process submissions (Crawl4AI)
+    # Step 1: Submissions
+    run_state.update(stage="1/6 제보 처리 (Crawl4AI)", progress=0.20)
     r = await step_process_submissions()
     results.append(r)
+    run_state.update(detail=f"제보: {r.get('processed', 0)} done, {r.get('failed', 0)} failed", progress=0.30)
 
-    # Step 2: Filter feed items (Gemma4)
+    # Step 2: Feed filter
+    run_state.update(stage="2/6 피드 필터링 (Gemma4)", progress=0.32)
     r = await step_filter_feed()
     results.append(r)
+    run_state.update(detail=f"피드: {r.get('kept', 0)} 유지, {r.get('removed', 0)} 제거", progress=0.45)
 
-    # Step 3: Score unscored items (Gemma4)
+    # Step 3: Score
+    run_state.update(stage="3/6 아이템 분석 (Gemma4 Scoring)", progress=0.48)
     r = await step_score_items()
     results.append(r)
+    run_state.update(detail=f"분석: {r.get('scored', 0)}/{r.get('total', 0)} scored", progress=0.72)
 
-    # Step 4: Grouper (no Gemma)
+    # Step 4: Grouper
+    run_state.update(stage="4/6 아이템 그룹핑", progress=0.75)
     r = await step_run_grouper()
     results.append(r)
+    run_state.update(progress=0.85)
 
-    # Step 5: Category promotion (Gemma4)
+    # Step 5: Promotion
+    run_state.update(stage="5/6 카테고리 승격 검토 (Gemma4)", progress=0.88)
     r = await step_detect_promotions()
     results.append(r)
+    run_state.update(
+        stage="6/6 마무리",
+        detail=f"신규 카테고리 제안: {r.get('new_suggestions', 0)}",
+        progress=1.0,
+    )
 
     logger.info(f"========== Night Batch Done ==========")
     for r in results:
         logger.info(f"  {r}")
 
-    return results
+    return {"results": results}

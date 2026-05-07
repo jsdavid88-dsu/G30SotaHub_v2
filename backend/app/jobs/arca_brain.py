@@ -37,7 +37,11 @@ def _get_client() -> OpenAI:
 
 
 def _call_gemma(system: str, user: str, temperature: float = 0.2, max_tokens: int = 4000) -> str:
-    """Low-level Gemma call. Returns raw text response."""
+    """Low-level Gemma call. Returns raw text response.
+
+    Issue #6 fix (2026-05-07): completion_tokens / reasoning 길이 로그 추가.
+    Gemma4 26B 가 thinking 모델이라 reasoning tokens 부터 소비 → max_tokens 부족 시 mid-stream truncation.
+    """
     try:
         client = _get_client()
         resp = client.chat.completions.create(
@@ -49,7 +53,24 @@ def _call_gemma(system: str, user: str, temperature: float = 0.2, max_tokens: in
             temperature=temperature,
             max_tokens=max_tokens,
         )
-        return resp.choices[0].message.content or "" if resp.choices else ""
+        if not resp.choices:
+            logger.warning(f"Gemma: no choices in response (max_tokens={max_tokens})")
+            return ""
+        content = resp.choices[0].message.content or ""
+        # Issue #6 디버그: 사용 토큰 + content 길이 로그
+        usage = getattr(resp, "usage", None)
+        if usage:
+            logger.info(
+                f"Gemma usage: prompt={usage.prompt_tokens}, "
+                f"completion={usage.completion_tokens}, "
+                f"max_tokens={max_tokens}, content_len={len(content)}"
+            )
+            if usage.completion_tokens >= max_tokens - 50:
+                logger.warning(
+                    f"Gemma: completion_tokens={usage.completion_tokens} 가 max_tokens={max_tokens} "
+                    f"한계에 근접 — 응답 잘렸을 가능성"
+                )
+        return content
     except OpenAIError as e:
         logger.error(f"Gemma call failed: {e}")
         return ""
@@ -111,11 +132,15 @@ def filter_feed_items(items: list[dict]) -> list[dict]:
 
     user_msg = f"아래 {len(items)}개 피드 아이템을 필터링해줘.\n\n" + "\n\n".join(parts)
 
-    raw = _call_gemma(FILTER_SYSTEM, user_msg, temperature=0.1, max_tokens=len(items) * 200)
+    # Issue #6 fix: 200/item → 800/item (thinking 여유)
+    raw = _call_gemma(FILTER_SYSTEM, user_msg, temperature=0.1, max_tokens=len(items) * 800)
     parsed = _parse_json(raw)
 
     if not isinstance(parsed, list):
-        logger.warning(f"Feed filter: failed to parse response")
+        snippet = raw[:500].replace("\n", "\\n") if raw else "<empty>"
+        logger.warning(
+            f"Feed filter: failed to parse (items={len(items)}, raw_len={len(raw)}, snippet={snippet!r})"
+        )
         # Fallback: mark all as relevant
         return [{"id": i + 1, "relevant": True, "tags": [], "reason": "파싱 실패"} for i in range(len(items))]
 
@@ -160,11 +185,17 @@ def score_items(items: list[dict]) -> list[dict]:
             parts.append(f"- 내용:\n{abstract}")
         parts.append("")
 
-    raw = _call_gemma(SCORE_SYSTEM, "\n".join(parts), temperature=0.3, max_tokens=len(items) * 500)
+    # Issue #6 fix: 500/item → 1800/item (Gemma4 26B thinking 모델 reasoning 여유)
+    raw = _call_gemma(SCORE_SYSTEM, "\n".join(parts), temperature=0.3, max_tokens=len(items) * 1800)
     parsed = _parse_json(raw)
 
     if not isinstance(parsed, list):
-        logger.warning("Scoring: failed to parse response")
+        # Issue #6 fix: 디버그용 — raw 응답 첫 800자 + 길이 로그
+        snippet = raw[:800].replace("\n", "\\n") if raw else "<empty>"
+        logger.warning(
+            f"Scoring: failed to parse response (items={len(items)}, raw_len={len(raw)}, "
+            f"raw_snippet={snippet!r})"
+        )
         return []
 
     return parsed
