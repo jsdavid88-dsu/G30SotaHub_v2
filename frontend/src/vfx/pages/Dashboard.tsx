@@ -5,13 +5,13 @@ import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Sparkles, TrendingUp, AlertCircle, Clock, Database, Zap,
-  RefreshCw, GitBranch, Link2, Plus, X, Loader2,
+  RefreshCw, GitBranch, Link2, Plus, X, Loader2, Brain,
 } from "lucide-react";
 import { fetchCategories } from "../api/categories";
 import { fetchSummary } from "../api/stats";
 import { fetchItems } from "../api/items";
 import {
-  triggerCrawlAll, triggerLinkCodes, triggerBuildLineage,
+  triggerCrawlAll, triggerLinkCodes, triggerBuildLineage, triggerNightBatch,
   createCategory, deleteCategory,
 } from "../api/admin";
 import CategorySection from "../components/CategorySection";
@@ -91,12 +91,12 @@ function AdminToolbar() {
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const run = async (label: string, fn: () => Promise<unknown>) => {
+  const run = async (label: string, fn: () => Promise<unknown>, hint: string) => {
     setBusy(label); setMsg(null);
     try {
       await fn();
-      setMsg(`${label} 완료 — 1-2분 후 새로고침`);
-      setTimeout(() => { qc.invalidateQueries(); setMsg(null); }, 5000);
+      setMsg(`${label} 시작됨 — ${hint}`);
+      setTimeout(() => { qc.invalidateQueries(); setMsg(null); }, 8000);
     } catch (e) {
       setMsg(`에러: ${e instanceof Error ? e.message : String(e)}`);
       setTimeout(() => setMsg(null), 5000);
@@ -118,12 +118,25 @@ function AdminToolbar() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
-      <div style={{ display: "flex", gap: 8 }}>
-        <Btn icon={RefreshCw} label="전체 수집" onClick={() => run("전체 수집", triggerCrawlAll)} primary />
-        <Btn icon={Link2} label="코드 링크" onClick={() => run("코드 링크", triggerLinkCodes)} />
-        <Btn icon={GitBranch} label="계보 빌드" onClick={() => run("계보 빌드", triggerBuildLineage)} />
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+        <Btn
+          icon={Brain}
+          label="야간 배치 (Gemma 분석)"
+          onClick={() => run("야간 배치", triggerNightBatch, "5-30분 진행 (Gemma 4 분석 + 그룹핑 + 승격 검토). 백엔드 콘솔에서 진행 확인.")}
+          primary
+        />
+        <Btn icon={RefreshCw} label="빠른 수집" onClick={() => run("빠른 수집", triggerCrawlAll, "1-2분 진행. 키워드 매칭만 (LLM 분석 X). 새로고침해서 카운트 확인.")} />
+        <Btn icon={Link2} label="코드 링크" onClick={() => run("코드 링크", triggerLinkCodes, "arxiv ↔ GitHub 매칭. 1분 진행.")} />
+        <Btn icon={GitBranch} label="계보 빌드" onClick={() => run("계보 빌드", triggerBuildLineage, "Semantic Scholar 인용 그래프. 2-5분 진행.")} />
       </div>
-      {msg && <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>{msg}</div>}
+      {msg && (
+        <div style={{
+          fontSize: 12, color: "var(--color-text-secondary)",
+          maxWidth: 480, textAlign: "right", lineHeight: 1.5,
+        }}>
+          {msg}
+        </div>
+      )}
     </div>
   );
 }
