@@ -2,24 +2,20 @@ import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessageSquare, Send } from "lucide-react";
 import { createComment, fetchComments } from "../api/comments";
+import { cardStyle, sectionHeaderStyle, btnPrimary } from "../design";
 
-type Props = {
-  itemId: number;
-};
-
-export default function CommentSection({ itemId }: Props) {
-  const queryClient = useQueryClient();
+export default function CommentSection({ itemId }: { itemId: number }) {
+  const qc = useQueryClient();
   const [text, setText] = useState("");
 
   const { data: comments = [] } = useQuery({
-    queryKey: ["comments", itemId],
-    queryFn: () => fetchComments(itemId),
+    queryKey: ["comments", itemId], queryFn: () => fetchComments(itemId),
   });
 
   const mutation = useMutation({
     mutationFn: (content: string) => createComment(itemId, content),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["comments", itemId] });
+      qc.invalidateQueries({ queryKey: ["comments", itemId] });
       setText("");
     },
   });
@@ -32,59 +28,73 @@ export default function CommentSection({ itemId }: Props) {
   };
 
   return (
-    <section className="space-y-3">
-      <div className="flex items-center gap-2 text-sm font-semibold text-neutral-300">
-        <MessageSquare className="h-4 w-4" />
-        댓글 ({comments.length})
+    <section style={{ ...cardStyle, overflow: "hidden" }}>
+      <div style={{ ...sectionHeaderStyle, display: "flex", alignItems: "center", gap: 8 }}>
+        <MessageSquare style={{ width: 16, height: 16, color: "var(--color-accent)" }} />
+        <div style={{ fontSize: 16, fontWeight: 600, color: "var(--color-text-primary)" }}>
+          댓글 <span style={{ color: "var(--color-text-muted)", fontWeight: 400 }}>({comments.length})</span>
+        </div>
       </div>
 
-      <form onSubmit={onSubmit} className="rounded-xl border border-neutral-800 bg-neutral-900 p-3">
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="팀원에게 메모 남기기..."
-          rows={3}
-          className="w-full resize-none bg-transparent text-sm text-neutral-100 placeholder:text-neutral-500 focus:outline-none"
-        />
-        <div className="flex items-center justify-between mt-2 pt-2 border-t border-neutral-800">
-          <span className="text-[10px] text-neutral-500">
-            {text.length} / 4000
-          </span>
-          <button
-            type="submit"
-            disabled={!text.trim() || mutation.isPending}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <Send className="h-3 w-3" />
-            {mutation.isPending ? "전송 중..." : "전송"}
-          </button>
-        </div>
-      </form>
+      <div style={{ padding: 20 }}>
+        <form onSubmit={onSubmit} style={{
+          padding: 16, borderRadius: 12,
+          background: "#fff", border: "1px solid var(--color-border)",
+          marginBottom: comments.length > 0 ? 16 : 0,
+        }}>
+          <textarea
+            value={text} onChange={(e) => setText(e.target.value)}
+            placeholder="팀원에게 메모 남기기..." rows={3}
+            style={{
+              width: "100%", border: "none", outline: "none", resize: "none",
+              fontSize: 14, color: "var(--color-text-primary)", background: "transparent",
+              fontFamily: "inherit",
+            }}
+          />
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            marginTop: 8, paddingTop: 8, borderTop: "1px solid #f1f5f9",
+          }}>
+            <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>{text.length} / 4000</span>
+            <button type="submit" disabled={!text.trim() || mutation.isPending}
+              style={{ ...btnPrimary, opacity: !text.trim() || mutation.isPending ? 0.4 : 1 }}>
+              <Send style={{ width: 12, height: 12 }} />
+              {mutation.isPending ? "전송 중..." : "전송"}
+            </button>
+          </div>
+        </form>
 
-      {comments.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-neutral-800 p-6 text-center text-xs text-neutral-500">
-          첫 댓글을 남겨보세요
-        </div>
-      ) : (
-        <ul className="space-y-2">
-          {comments.map((c) => (
-            <li
-              key={c.id}
-              className="rounded-lg border border-neutral-800 bg-neutral-900 p-3"
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-semibold text-neutral-300">
-                  {c.user_name || "익명"}
-                </span>
-                <span className="text-[10px] text-neutral-500">
-                  {new Date(c.created_at).toLocaleString("ko-KR")}
-                </span>
+        {comments.length === 0 ? (
+          <div style={{
+            padding: 24, textAlign: "center", fontSize: 13,
+            color: "var(--color-text-muted)",
+            border: "1px dashed var(--color-border)", borderRadius: 12,
+          }}>
+            첫 댓글을 남겨보세요
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {comments.map((c) => (
+              <div key={c.id} style={{
+                padding: "12px 16px", borderRadius: 12,
+                background: "#f8fafc", border: "1px solid var(--color-border)",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)" }}>
+                    {c.user_name || "익명"}
+                  </span>
+                  <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>
+                    {new Date(c.created_at).toLocaleString("ko-KR")}
+                  </span>
+                </div>
+                <p style={{ fontSize: 14, color: "var(--color-text-secondary)", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
+                  {c.content}
+                </p>
               </div>
-              <p className="text-sm text-neutral-200 whitespace-pre-wrap">{c.content}</p>
-            </li>
-          ))}
-        </ul>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
     </section>
   );
 }

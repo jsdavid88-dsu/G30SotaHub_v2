@@ -7,6 +7,7 @@ import { fetchItems, type ItemFilters } from "../api/items";
 import ItemCard from "../components/ItemCard";
 import FilterPanel from "../components/FilterPanel";
 import { dedup } from "../utils/dedup";
+import { cardStyle, sectionHeaderStyle, sectionTitleStyle, badgeStyle, btnGhost } from "../design";
 
 export default function CategoryDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -24,81 +25,91 @@ export default function CategoryDetail() {
   });
   const { deduped: items, groupSources } = useMemo(() => dedup(rawItems), [rawItems]);
 
-  if (!category) {
-    return <div className="text-neutral-500">Loading...</div>;
-  }
+  if (!category) return <div style={{ color: "var(--color-text-muted)" }}>Loading...</div>;
 
   return (
-    <div className="space-y-6">
-      <Link
-        to="/vfx"
-        className="inline-flex items-center gap-1 text-xs text-neutral-400 hover:text-neutral-100"
-      >
-        <ChevronLeft className="h-3.5 w-3.5" /> 대시보드
+    <div style={{ width: "100%" }}>
+      <Link to="/vfx" style={{ ...btnGhost, marginBottom: 16 }}>
+        <ChevronLeft style={{ width: 14, height: 14 }} /> 대시보드
       </Link>
 
-      <header className="rounded-xl border border-neutral-800 bg-neutral-900 p-6">
-        <div className="flex items-start gap-4">
-          <div className="text-5xl">{category.icon}</div>
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold">{category.name_ko}</h1>
-            <p className="text-sm text-neutral-500 mt-0.5">{category.name_en}</p>
+      <div style={{ ...cardStyle, padding: 28, marginBottom: 24 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 20 }}>
+          <div style={{ fontSize: 56 }}>{category.icon}</div>
+          <div style={{ flex: 1 }}>
+            <h1 style={{ fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 600, color: "var(--color-text-primary)" }}>
+              {category.name_ko}
+            </h1>
+            <p style={{ fontSize: 13, color: "var(--color-text-muted)", marginTop: 2 }}>{category.name_en}</p>
             {category.description && (
-              <p className="text-sm text-neutral-400 mt-2">{category.description}</p>
+              <p style={{ fontSize: 14, color: "var(--color-text-secondary)", marginTop: 12, lineHeight: 1.6 }}>
+                {category.description}
+              </p>
             )}
           </div>
-          <div className="flex flex-col items-end gap-1">
-            <div className="text-2xl font-bold text-brand-400">{category.item_count}</div>
-            <div className="text-[10px] text-neutral-500">총 아이템</div>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+            <div style={{ fontSize: 28, fontWeight: 700, color: "var(--color-accent)" }}>{category.item_count}</div>
+            <div style={{ fontSize: 11, color: "var(--color-text-muted)" }}>총 아이템</div>
             {category.new_this_week > 0 && (
-              <div className="rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-400">
+              <span style={badgeStyle("var(--color-danger-light)", "var(--color-danger)")}>
                 +{category.new_this_week} 이번 주
-              </div>
+              </span>
             )}
           </div>
         </div>
 
         {category.current_sota.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-neutral-800">
-            <div className="text-[10px] font-semibold text-neutral-500 uppercase mb-2">
+          <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid #f1f5f9" }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>
               현재 SOTA
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {category.current_sota.map((sota) => (
-                <span
-                  key={sota}
-                  className="rounded-md border border-brand-500/30 bg-brand-500/10 px-2 py-1 text-xs text-brand-300"
-                >
+                <span key={sota} style={{
+                  padding: "6px 12px", borderRadius: 8, fontSize: 13,
+                  background: "var(--color-accent-light)", color: "var(--color-accent-dark)",
+                  fontWeight: 500,
+                }}>
                   ⭐ {sota}
                 </span>
               ))}
             </div>
           </div>
         )}
-      </header>
+      </div>
 
-      <FilterPanel filters={filters} onChange={setFilters} />
+      <div style={{ marginBottom: 16 }}>
+        <FilterPanel filters={filters} onChange={setFilters} />
+      </div>
 
-      <section>
-        <h2 className="text-sm font-semibold text-neutral-300 mb-3">
-          발견 이력 ({items.length})
-        </h2>
-        {items.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-neutral-800 p-8 text-center text-sm text-neutral-500">
-            조건에 맞는 아이템이 없습니다
+      <div style={{ ...cardStyle, overflow: "hidden" }}>
+        <div style={sectionHeaderStyle}>
+          <div style={sectionTitleStyle}>
+            발견 이력 <span style={{ color: "var(--color-text-muted)", fontWeight: 400 }}>({items.length})</span>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {items.map((item) => (
-              <ItemCard
-                key={item.id}
-                item={item}
-                groupSources={item.group_id ? groupSources.get(item.group_id) : undefined}
-              />
-            ))}
-          </div>
-        )}
-      </section>
+        </div>
+        <div style={{ padding: 20 }}>
+          {items.length === 0 ? (
+            <div style={{
+              padding: 32, textAlign: "center", fontSize: 13,
+              color: "var(--color-text-muted)",
+              border: "1px dashed var(--color-border)", borderRadius: 12,
+            }}>
+              조건에 맞는 아이템이 없습니다
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
+              {items.map((item) => (
+                <ItemCard
+                  key={item.id}
+                  item={item}
+                  groupSources={item.group_id ? groupSources.get(item.group_id) : undefined}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,38 +1,68 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { Category } from "../types";
+import { badgeStyle } from "../design";
+
+function Card({ cat }: { cat: Category }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <Link
+      to={`/vfx/category/${cat.slug}`}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: "block", padding: 16, borderRadius: 12,
+        background: "var(--color-card)",
+        border: `1px solid ${hover ? "var(--color-accent)" : "var(--color-border)"}`,
+        textDecoration: "none",
+        boxShadow: hover ? "0 4px 12px rgba(79,70,229,0.10)" : "none",
+        transform: hover ? "translateY(-2px)" : "none",
+        transition: "all 0.18s",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
+        <div style={{ fontSize: 28 }}>{cat.icon}</div>
+        {cat.new_this_week > 0 && (
+          <span style={badgeStyle("var(--color-danger-light)", "var(--color-danger)")}>
+            +{cat.new_this_week}
+          </span>
+        )}
+      </div>
+      <h3 style={{
+        fontSize: 14, fontWeight: 600,
+        color: hover ? "var(--color-accent)" : "var(--color-text-primary)",
+        transition: "color 0.15s",
+      }}>
+        {cat.name_ko}
+      </h3>
+      <p style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 2 }}>{cat.name_en}</p>
+      <div style={{
+        marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between",
+        fontSize: 11,
+      }}>
+        <span style={{ color: "var(--color-text-muted)" }}>총 {cat.item_count}</span>
+        {cat.current_sota.length > 0 && (
+          <span title={cat.current_sota[0]} style={{
+            color: "var(--color-accent)", maxWidth: 120,
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            fontWeight: 500,
+          }}>
+            ⭐ {cat.current_sota[0].split(" ")[0]}
+          </span>
+        )}
+      </div>
+    </Link>
+  );
+}
 
 export default function CategoryGrid({ categories }: { categories: Category[] }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
-      {categories.map((cat) => (
-        <Link
-          key={cat.slug}
-          to={`/vfx/category/${cat.slug}`}
-          className="group relative overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900 p-4 hover:border-brand-500/50 transition"
-        >
-          <div className="flex items-start justify-between mb-3">
-            <div className="text-3xl">{cat.icon}</div>
-            {cat.new_this_week > 0 && (
-              <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-400">
-                +{cat.new_this_week}
-              </span>
-            )}
-          </div>
-          <h3 className="font-semibold text-sm text-neutral-100 group-hover:text-brand-300 transition">
-            {cat.name_ko}
-          </h3>
-          <p className="text-[11px] text-neutral-500 mt-0.5">{cat.name_en}</p>
-
-          <div className="mt-3 flex items-center justify-between text-[10px]">
-            <span className="text-neutral-500">총 {cat.item_count}</span>
-            {cat.current_sota.length > 0 && (
-              <span className="text-brand-400 truncate max-w-[120px]" title={cat.current_sota[0]}>
-                ⭐ {cat.current_sota[0].split(" ")[0]}
-              </span>
-            )}
-          </div>
-        </Link>
-      ))}
+    <div style={{
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+      gap: 12,
+    }}>
+      {categories.map((cat) => <Card key={cat.slug} cat={cat} />)}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { searchItems } from "../api/search";
 import ItemCard from "../components/ItemCard";
 import { dedup } from "../utils/dedup";
+import { pageHeadingStyle, pageSubtitleStyle, cardStyle } from "../design";
 
 export default function SearchResults() {
   const [params] = useSearchParams();
@@ -17,24 +18,24 @@ export default function SearchResults() {
   const { deduped: items, groupSources } = useMemo(() => dedup(rawItems), [rawItems]);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">검색 결과</h1>
-        <p className="text-sm text-neutral-500 mt-1">
-          "{q}" — {isLoading ? "..." : `${items.length}건`}
+    <div style={{ width: "100%" }}>
+      <div style={{ marginBottom: 24 }}>
+        <h1 style={pageHeadingStyle}>검색 결과</h1>
+        <p style={pageSubtitleStyle}>
+          "<span style={{ color: "var(--color-accent)", fontWeight: 500 }}>{q}</span>" — {isLoading ? "..." : `${items.length}건`}
         </p>
       </div>
 
       {q.length < 2 ? (
-        <div className="rounded-xl border border-dashed border-neutral-800 p-12 text-center text-sm text-neutral-500">
-          2자 이상 입력하세요
+        <div style={{ ...cardStyle, padding: 48, textAlign: "center" }}>
+          <p style={{ fontSize: 14, color: "var(--color-text-muted)" }}>2자 이상 입력하세요</p>
         </div>
       ) : items.length === 0 && !isLoading ? (
-        <div className="rounded-xl border border-dashed border-neutral-800 p-12 text-center text-sm text-neutral-500">
-          결과 없음
+        <div style={{ ...cardStyle, padding: 48, textAlign: "center" }}>
+          <p style={{ fontSize: 14, color: "var(--color-text-muted)" }}>결과 없음</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
           {items.map((item) => (
             <ItemCard
               key={item.id}

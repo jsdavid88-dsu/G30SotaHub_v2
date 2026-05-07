@@ -1,127 +1,134 @@
+import { useState } from "react";
 import { Bookmark, BookmarkCheck, ExternalLink, MessageSquare } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { FeedItem } from "../types";
 import { toggleSave } from "../api/feed";
+import { badgeStyle } from "../design";
 
-const SOURCE_STYLES: Record<FeedItem["source"], { bg: string; label: string }> = {
-  firecrawl: { bg: "bg-purple-500/10 text-purple-300 border-purple-500/30", label: "웹" },
-  reddit: { bg: "bg-orange-500/10 text-orange-300 border-orange-500/30", label: "Reddit" },
-  x: { bg: "bg-sky-500/10 text-sky-300 border-sky-500/30", label: "X" },
-  hf_space: { bg: "bg-yellow-500/10 text-yellow-300 border-yellow-500/30", label: "HF" },
-  manual: { bg: "bg-neutral-500/10 text-neutral-300 border-neutral-500/30", label: "수동" },
+const SOURCE_META: Record<string, { bg: string; color: string; label: string }> = {
+  firecrawl: { bg: "#f3e8ff", color: "#6b21a8", label: "웹" },
+  reddit:    { bg: "#ffedd5", color: "#c2410c", label: "Reddit" },
+  x:         { bg: "#e0f2fe", color: "#0369a1", label: "X" },
+  hf_space:  { bg: "#fef3c7", color: "#92400e", label: "HF" },
+  manual:    { bg: "#f1f5f9", color: "#475569", label: "수동" },
 };
 
 export default function FeedCard({ item }: { item: FeedItem }) {
-  const queryClient = useQueryClient();
+  const [hover, setHover] = useState(false);
+  const qc = useQueryClient();
 
   const saveMutation = useMutation({
     mutationFn: () => toggleSave(item.id, !item.is_saved),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["feed"] });
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["feed"] }),
   });
 
-  const sourceStyle = SOURCE_STYLES[item.source] ?? SOURCE_STYLES.manual;
+  const src = SOURCE_META[item.source] || SOURCE_META.manual;
   const meta = item.feed_metadata as Record<string, unknown>;
   const subreddit = meta?.subreddit as string | undefined;
   const score = meta?.score as number | undefined;
   const numComments = meta?.num_comments as number | undefined;
 
   return (
-    <article className="rounded-lg border border-neutral-800 bg-neutral-900 overflow-hidden hover:border-brand-500/50 transition group">
+    <article
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        background: "var(--color-card)",
+        border: `1px solid ${hover ? "var(--color-accent)" : "var(--color-border)"}`,
+        borderRadius: 12,
+        overflow: "hidden",
+        boxShadow: hover ? "0 4px 12px rgba(79,70,229,0.10)" : "0 1px 2px rgba(0,0,0,0.02)",
+        transition: "all 0.15s",
+      }}
+    >
       {item.image_url && (
-        <a
-          href={item.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block aspect-video bg-neutral-950 overflow-hidden"
-        >
+        <a href={item.url} target="_blank" rel="noopener noreferrer"
+          style={{ display: "block", aspectRatio: "16/9", background: "#f1f5f9", overflow: "hidden" }}>
           <img
-            src={item.image_url}
-            alt=""
-            className="w-full h-full object-cover group-hover:scale-105 transition"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = "none";
+            src={item.image_url} alt=""
+            style={{
+              width: "100%", height: "100%", objectFit: "cover",
+              transform: hover ? "scale(1.04)" : "none",
+              transition: "transform 0.3s",
             }}
+            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
           />
         </a>
       )}
 
-      <div className="p-4">
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span
-              className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${sourceStyle.bg}`}
-            >
-              {sourceStyle.label}
-              {subreddit && <span className="ml-1 opacity-70">r/{subreddit}</span>}
-            </span>
-          </div>
+      <div style={{ padding: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+          <span style={badgeStyle(src.bg, src.color)}>
+            {src.label}
+            {subreddit && <span style={{ opacity: 0.7, marginLeft: 4 }}>r/{subreddit}</span>}
+          </span>
           <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              saveMutation.mutate();
-            }}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); saveMutation.mutate(); }}
             disabled={saveMutation.isPending}
-            className="text-neutral-500 hover:text-amber-400 transition disabled:opacity-50"
             title={item.is_saved ? "저장 해제" : "북마크"}
+            style={{
+              background: "transparent", border: "none", cursor: "pointer",
+              color: item.is_saved ? "var(--color-warning)" : "var(--color-text-muted)",
+              opacity: saveMutation.isPending ? 0.5 : 1,
+              display: "inline-flex",
+            }}
           >
-            {item.is_saved ? (
-              <BookmarkCheck className="h-4 w-4 text-amber-400 fill-amber-400/20" />
-            ) : (
-              <Bookmark className="h-4 w-4" />
-            )}
+            {item.is_saved ? <BookmarkCheck style={{ width: 16, height: 16, fill: "currentColor", fillOpacity: 0.2 }} /> : <Bookmark style={{ width: 16, height: 16 }} />}
           </button>
         </div>
 
-        <h3 className="text-sm font-semibold text-neutral-100 mb-1 line-clamp-2">
-          <a
-            href={item.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-brand-300"
-          >
+        <h3 style={{
+          fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)",
+          marginBottom: 6, lineHeight: 1.4,
+          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+        }}>
+          <a href={item.url} target="_blank" rel="noopener noreferrer"
+            style={{ color: "inherit", textDecoration: "none" }}>
             {item.title}
           </a>
         </h3>
 
         {item.excerpt && (
-          <p className="text-xs text-neutral-400 line-clamp-3 mb-3">{item.excerpt}</p>
+          <p style={{
+            fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5,
+            marginBottom: 12,
+            display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden",
+          }}>
+            {item.excerpt}
+          </p>
         )}
 
         {item.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-3">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 12 }}>
             {item.tags.slice(0, 4).map((tag) => (
-              <span
-                key={tag}
-                className="inline-block rounded bg-neutral-800 px-1.5 py-0.5 text-[10px] text-neutral-400"
-              >
+              <span key={tag} style={{
+                padding: "2px 8px", borderRadius: 6, fontSize: 11,
+                background: "#f1f5f9", color: "var(--color-text-muted)",
+              }}>
                 #{tag}
               </span>
             ))}
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-2 text-[10px] text-neutral-500 pt-2 border-t border-neutral-800">
-          <div className="flex items-center gap-2">
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          paddingTop: 10, borderTop: "1px solid #f1f5f9",
+          fontSize: 11, color: "var(--color-text-muted)",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span>{new Date(item.discovered_at).toLocaleDateString("ko-KR")}</span>
             {item.author && <span>· {item.author}</span>}
             {typeof score === "number" && <span>· ⬆{score}</span>}
             {typeof numComments === "number" && (
-              <span className="inline-flex items-center gap-0.5">
-                · <MessageSquare className="h-3 w-3" />
-                {numComments}
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+                · <MessageSquare style={{ width: 11, height: 11 }} /> {numComments}
               </span>
             )}
           </div>
-          <a
-            href={item.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-neutral-300"
-          >
-            <ExternalLink className="h-3 w-3" />
+          <a href={item.url} target="_blank" rel="noopener noreferrer"
+            style={{ color: "var(--color-text-muted)", display: "inline-flex" }}>
+            <ExternalLink style={{ width: 12, height: 12 }} />
           </a>
         </div>
       </div>

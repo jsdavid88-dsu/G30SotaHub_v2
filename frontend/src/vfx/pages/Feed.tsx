@@ -3,13 +3,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Flame, RefreshCw, Bookmark, Globe, Youtube, Twitter, Sparkles, FileText } from "lucide-react";
 import { fetchFeed, triggerFeedCrawl } from "../api/feed";
 import FeedCard from "../components/FeedCard";
+import { pageHeadingStyle, pageSubtitleStyle, cardStyle, btnPrimary } from "../design";
 
 type Tab = "all" | "youtube" | "x" | "hf_paper" | "hf_space" | "paperswithcode" | "crawl4ai" | "reddit" | "saved";
 
 export default function Feed() {
   const [tab, setTab] = useState<Tab>("all");
   const [refreshMsg, setRefreshMsg] = useState<string | null>(null);
-  const queryClient = useQueryClient();
+  const qc = useQueryClient();
 
   const filters = (() => {
     if (tab === "saved") return { saved: true, limit: 100 };
@@ -27,7 +28,7 @@ export default function Feed() {
     onSuccess: () => {
       setRefreshMsg("수집 시작됨 — 1-2분 후 새로고침");
       setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ["feed"] });
+        qc.invalidateQueries({ queryKey: ["feed"] });
         setRefreshMsg(null);
       }, 5000);
     },
@@ -50,75 +51,86 @@ export default function Feed() {
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
+    <div style={{ width: "100%" }}>
+      <div style={{ marginBottom: 24, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Flame className="h-6 w-6 text-orange-400" />
+          <h1 style={{ ...pageHeadingStyle, display: "flex", alignItems: "center", gap: 10 }}>
+            <Flame style={{ width: 26, height: 26, color: "var(--color-warning)" }} />
             실전 피드
           </h1>
-          <p className="text-sm text-neutral-500 mt-1">
-            뉴스, 워크플로우, 튜토리얼, 커뮤니티 논의 · 6시간마다 자동 수집
-          </p>
+          <p style={pageSubtitleStyle}>뉴스, 워크플로우, 튜토리얼, 커뮤니티 논의 · 6시간마다 자동 수집</p>
         </div>
-
         <button
           onClick={() => crawlMutation.mutate()}
           disabled={crawlMutation.isPending}
-          className="flex items-center gap-2 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-500 disabled:opacity-50"
+          style={{ ...btnPrimary, opacity: crawlMutation.isPending ? 0.5 : 1 }}
         >
-          <RefreshCw className={`h-3.5 w-3.5 ${crawlMutation.isPending ? "animate-spin" : ""}`} />
+          <RefreshCw style={{ width: 14, height: 14, animation: crawlMutation.isPending ? "spin 1s linear infinite" : "none" }} />
           지금 수집
         </button>
       </div>
 
       {refreshMsg && (
-        <div className="rounded-lg border border-brand-500/30 bg-brand-500/10 px-4 py-2 text-xs text-brand-200">
+        <div style={{
+          padding: "10px 16px", borderRadius: 10, marginBottom: 20,
+          background: "var(--color-accent-light)", color: "var(--color-accent-dark)",
+          fontSize: 13, fontWeight: 500,
+        }}>
           {refreshMsg}
         </div>
       )}
 
-      <div className="flex items-center gap-2 border-b border-neutral-800 pb-2">
-        {tabs.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs transition ${
-              tab === id
-                ? "bg-brand-600/20 text-brand-300"
-                : "text-neutral-400 hover:bg-neutral-800"
-            }`}
-          >
-            <Icon className="h-3.5 w-3.5" />
-            {label}
-          </button>
-        ))}
+      {/* Tabs */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, borderBottom: "1px solid var(--color-border)", marginBottom: 20, paddingBottom: 1, overflowX: "auto" }}>
+        {tabs.map(({ id, label, icon: Icon }) => {
+          const active = tab === id;
+          return (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                padding: "8px 14px", borderRadius: "8px 8px 0 0",
+                fontSize: 13, fontWeight: 500,
+                background: active ? "var(--color-accent-light)" : "transparent",
+                color: active ? "var(--color-accent-dark)" : "var(--color-text-muted)",
+                border: "none",
+                borderBottom: active ? "2px solid var(--color-accent)" : "2px solid transparent",
+                marginBottom: -1,
+                cursor: "pointer", whiteSpace: "nowrap",
+                transition: "all 0.15s",
+              }}
+            >
+              <Icon style={{ width: 14, height: 14 }} />
+              {label}
+            </button>
+          );
+        })}
       </div>
 
       {isLoading ? (
-        <div className="rounded-xl border border-dashed border-neutral-800 p-12 text-center text-sm text-neutral-500">
-          로딩 중...
+        <div style={{ ...cardStyle, padding: 48, textAlign: "center" }}>
+          <p style={{ fontSize: 14, color: "var(--color-text-muted)" }}>로딩 중...</p>
         </div>
       ) : items.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-neutral-800 p-12 text-center space-y-2">
-          <p className="text-sm text-neutral-400">
+        <div style={{ ...cardStyle, padding: 48, textAlign: "center" }}>
+          <p style={{ fontSize: 14, fontWeight: 500, color: "var(--color-text-secondary)" }}>
             {tab === "saved" ? "북마크한 항목이 없습니다" : "수집된 피드가 없습니다"}
           </p>
           {tab !== "saved" && (
-            <p className="text-xs text-neutral-600">
-              우측 상단 "지금 수집" 버튼을 눌러 시작하세요.
-              <br />
-              Crawl4AI가 설치되지 않으면 Reddit만 수집됩니다.
+            <p style={{ fontSize: 12, color: "var(--color-text-muted)", marginTop: 8, lineHeight: 1.6 }}>
+              우측 상단 [지금 수집] 클릭. <br />
+              Crawl4AI 가 미설치면 Reddit 만 수집됩니다.
             </p>
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {items.map((item) => (
-            <FeedCard key={item.id} item={item} />
-          ))}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
+          {items.map((item) => <FeedCard key={item.id} item={item} />)}
         </div>
       )}
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
