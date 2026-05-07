@@ -9,8 +9,20 @@
 ## ⚡ 빠른 시작 (5090 PC 클론 후 첫 셋업)
 
 ### 사전 요구
-- **Windows 10/11**, Python 3.12+, Node 22+, Docker Desktop
-- (선택) **Ollama** — Gemma 4 자동 분석을 쓰려면. `ollama pull gemma4:26b`
+
+| 종류 | 필수 / 선택 | 비고 |
+|------|------------|------|
+| Windows 10/11 | 필수 | Linux/macOS 도 동작 (start.ps1 만 다시) |
+| Python 3.12+ | 필수 | `python --version` |
+| Node 22+ | 필수 | `node --version` |
+| Docker Desktop | 필수 | Postgres 컨테이너용 (또는 native PostgreSQL 16 직접 설치) |
+| **Ollama + gemma4:26b** | **선택 (강력 권장)** | **[야간 배치] 의 Gemma 4 분석 동작 조건.** `ollama pull gemma4:26b` (~16GB VRAM) |
+| GitHub PAT | 선택 | rate limit 완화 (anonymous 60req/h) |
+| HF token | 선택 | rate limit 완화 |
+| Reddit Client ID/Secret | 선택 | 없으면 Reddit 크롤 skip |
+| NAS 네트워크 드라이브 | 선택 | Phase 3 영상 첨부용 (`M:\sota_files\`) |
+
+`.env.example` 의 각 항목 주석에 발급 URL · skip 시 영향 다 적혀있음. 본인 필요한 만큼만 채우면 됨.
 
 ### 한 방 설치
 ```powershell
@@ -72,7 +84,38 @@ cd G30SotaHub_v2
 
 ---
 
-## 🤖 AI Cluster Worker (Gemma 4 자동 분석)
+## 📋 작업별 사전 조건 (수집/분석)
+
+VFX Dashboard 의 4개 admin 버튼 / 자동 스케줄러가 어떤 조건에서 동작하는지:
+
+| 작업 | 트리거 | 시간 | 필요 조건 | Gemma 4 사용? |
+|------|-------|------|----------|---------------|
+| **빠른 수집** | 버튼 / 09:00 자동 | 1-2분 | (옵션) GitHub/HF/Reddit 토큰 — 없으면 해당 소스 skip | ❌ 키워드 매칭만 |
+| **야간 배치** | 버튼 / 21:00 자동 | 5-30분 | **Ollama + gemma4:26b 필수** (없으면 분석 부분만 skip) | ✅ 핵심 분석 |
+| **코드 링크** | 버튼 | 1분 | Semantic Scholar API (anonymous OK) | ❌ |
+| **계보 빌드** | 버튼 | 2-5분 | Semantic Scholar API (anonymous OK) | ❌ |
+| **피드 크롤** | 버튼 / 12:00·18:00 자동 | 1-2분 | 토큰 옵션 (Reddit 토큰 없으면 reddit skip) | ❌ |
+
+### Gemma 4 동작 확인 (야간 배치 전)
+
+```powershell
+# 1. Ollama 설치되어 있나
+ollama list
+
+# 2. gemma4:26b 모델 받았나 (없으면)
+ollama pull gemma4:26b
+
+# 3. Ollama 서버 떠있나
+curl http://localhost:11434/api/tags
+# → {"models":[{"name":"gemma4:26b",...}]} 보이면 OK
+```
+
+`.env` 의 `OLLAMA_BASE_URL` 기본값 `http://localhost:11434` (단일 PC 운용).
+별도 GPU PC 면 그 PC IP 로 변경 (예: `http://100.x.x.x:11434` Tailscale).
+
+---
+
+## 🤖 AI Cluster Worker (Gemma 4 분리 운용 시)
 
 VFX 의 야간 배치는 두 가지 모드:
 
@@ -192,12 +235,18 @@ G30SotaHub_v2/
 
 ---
 
-## 🔧 주의사항
+## 🔧 트러블슈팅
 
-- **첫 실행 시 alembic 마이그레이션 실패 가능** — VFX 마이그가 SQLite 기준으로 작성되어 Postgres 호환 미검증. 실패 시 issue 등록 또는 Phase 1 마이그 정비 진행.
-- **ItemComment vs Hub Comment** — 충돌 회피로 VFX 의 `Comment` 모델을 `ItemComment` 로 리네임함 (테이블 `item_comments`). API 호환성은 유지.
-- **VFX 영역은 익명 접근** — `/vfx/*` 가 Hub 의 ProtectedRoute 밖에 있어 로그인 없이 접근 가능. Phase 4 에서 통합 인증 적용 예정.
-- **포트 3000 Vite 충돌** — 기존 Hub 가 3000 사용 중이면 다른 프로세스 종료 후 `start.ps1`.
+| 증상 | 원인 | 해결 |
+|------|------|------|
+| `[빠른 수집]` 눌러도 데이터 0 | `.env` 에 토큰 없음 → 대부분 소스 skip | GitHub/HF/Reddit 토큰 채움. 그래도 arxiv 는 항상 동작해야 함. 백엔드 콘솔 에러 확인 |
+| `[야간 배치]` 가 Gemma 호출 실패 | Ollama 미설치 또는 미실행 | `ollama serve` + `ollama pull gemma4:26b` |
+| `401 Invalid admin token` | 백엔드 옛 코드 | `git pull` + 백엔드 재시작 (run_server 창 Ctrl+C → 다시) |
+| `Window: ProactorEventLoop ...` | uvicorn 직호출 | `python run_server.py --reload` 사용 (asyncio policy wrapper) |
+| `ConnectionDoesNotExistError` | DB pool stale | 백엔드 재시작 (이미 pool_pre_ping 설정돼 있음) |
+| `403` 모든 api | 사용자 status pending | DEBUG=true 면 자동 active. 아니면 admin 이 status 변경 |
+| 첫 실행 시 alembic 실패 | VFX 마이그 SQLite→Postgres 호환 일부 미검증 | issue 등록 또는 Phase 1 정비 |
+| 포트 3000 충돌 | 기존 Hub 이미 실행 중 | 그 프로세스 종료 후 `start.ps1` |
 
 ---
 
