@@ -11,6 +11,7 @@ import LineageGraph from "./pages/LineageGraph";
 import SearchResults from "./pages/SearchResults";
 import Feed from "./pages/Feed";
 import Submit from "./pages/Submit";
+import Triage from "./pages/Triage";
 
 export default function VfxApp() {
   return (
@@ -23,6 +24,7 @@ export default function VfxApp() {
         <Route path="graph" element={<LineageGraph />} />
         <Route path="feed" element={<Feed />} />
         <Route path="submit" element={<Submit />} />
+        <Route path="triage" element={<Triage />} />
         <Route path="search" element={<SearchResults />} />
       </Route>
     </Routes>

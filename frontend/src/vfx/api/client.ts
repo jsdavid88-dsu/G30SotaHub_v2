@@ -8,24 +8,20 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-export async function apiGet<T>(path: string): Promise<T> {
+async function _request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${API_URL}/api/v1/vfx${path}`, {
-    headers: authHeaders(),
+    method,
+    headers: { ...(body ? { "Content-Type": "application/json" } : {}), ...authHeaders() },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
     throw new Error(`API error ${res.status}: ${await res.text()}`);
   }
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
-export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_URL}/api/v1/vfx${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    throw new Error(`API error ${res.status}: ${await res.text()}`);
-  }
-  return res.json() as Promise<T>;
-}
+export const apiGet = <T>(path: string) => _request<T>("GET", path);
+export const apiPost = <T>(path: string, body: unknown) => _request<T>("POST", path, body);
+export const apiPatch = <T>(path: string, body: unknown) => _request<T>("PATCH", path, body);
+export const apiDelete = <T>(path: string) => _request<T>("DELETE", path);
