@@ -36,6 +36,32 @@ cd G30SotaHub_v2
 .\start.ps1
 ```
 
+### 🔄 git pull 후 (이슈 #9 — 5090 PC 같은 운영 환경에서 매번 확인)
+```powershell
+git pull
+.\start.ps1   # alembic head 자동 검증. mismatch 면 prompt 띄우고 upgrade.
+```
+
+`.\start.ps1` 가 alembic 버전 검증해서 신규 마이그레이션 펜딩이면 **백업 권고 + y/N 프롬프트** 띄움. **destructive migration 가능성 있는 (예: Phase 1 통합) 경우 PG 백업 강력 권장**:
+```powershell
+docker compose exec db pg_dump -U hub hub > backup_before_migrate.sql
+```
+
+수동 적용 원하면:
+```powershell
+cd backend
+.\.venv\Scripts\activate
+alembic current   # 현재 DB 버전
+alembic heads     # 코드의 head 버전
+alembic upgrade head
+```
+
+### 🩺 서버 상태 빠른 확인
+```powershell
+# schema_ok=false 이면 마이그레이션 펜딩 (Issue #9)
+curl http://localhost:8000/api/health
+```
+
 접속:
 - **Frontend** http://localhost:3000 — Hub 일상 협업 (대시보드, 데일리, 프로젝트, 캘린더, ...)
 - **VFX SOTA**  http://localhost:3000/vfx — VFX 자동 수집 + 카테고리 + 계보 그래프 + 피드 + 제보

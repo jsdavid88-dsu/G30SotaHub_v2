@@ -1,5 +1,6 @@
 # G30SotaHub v2 — Start Script (Windows)
 # DB + Backend + Frontend 를 새 터미널 3개에 띄움.
+# Issue #9 fix: 백엔드 시작 전 alembic head 자동 검증 + (확인 후) upgrade.
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = $PSScriptRoot
@@ -21,14 +22,64 @@ if (-not (Test-Path frontend\node_modules)) {
 Write-Host "=== G30SotaHub v2 Start ===" -ForegroundColor Cyan
 
 # 1) DB
-Write-Host "[1/3] PostgreSQL 컨테이너 시작..." -ForegroundColor Yellow
+Write-Host "[1/4] PostgreSQL 컨테이너 시작..." -ForegroundColor Yellow
 docker compose up -d db | Out-Null
 Write-Host "  ✓ db 기동" -ForegroundColor Green
 
-# 2) Backend (새 PowerShell 창)
+# 2) Alembic schema 검증 (Issue #9)
+Write-Host "[2/4] Alembic schema 검증..." -ForegroundColor Yellow
+$env:DATABASE_URL = "postgresql+asyncpg://hub:hub@localhost:5432/hub"
+
+# DB healthy 대기 (최대 15초)
+$ready = $false
+for ($i = 0; $i -lt 15; $i++) {
+    $health = (docker inspect --format='{{.State.Health.Status}}' g30sotahub_v2-db-1 2>$null)
+    if (-not $health) { $health = (docker inspect --format='{{.State.Health.Status}}' G30SotaHub_v2-db-1 2>$null) }
+    if ($health -eq 'healthy') { $ready = $true; break }
+    Start-Sleep -Seconds 1
+}
+
+Push-Location backend
+$current = & .\.venv\Scripts\alembic.exe current 2>&1 | Out-String
+$heads = & .\.venv\Scripts\alembic.exe heads 2>&1 | Out-String
+
+# alembic current/heads 출력에서 revision 만 추출
+$currentRev = if ($current -match '([a-f0-9_]+)\s*\(head\)|^([a-f0-9_]+)') { $matches[1] ?? $matches[2] } else { '' }
+$headsRev = if ($heads -match '([a-f0-9_]+)\s*\(head\)|^([a-f0-9_]+)') { $matches[1] ?? $matches[2] } else { '' }
+
+if ($currentRev -and $headsRev -and ($currentRev -eq $headsRev)) {
+    Write-Host "  ✓ Schema OK (rev=$currentRev)" -ForegroundColor Green
+} else {
+    Write-Host ""
+    Write-Host "  ⚠️  ALEMBIC SCHEMA MISMATCH (Issue #9)" -ForegroundColor Yellow
+    Write-Host "      DB current : $currentRev" -ForegroundColor Yellow
+    Write-Host "      Head       : $headsRev" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "      이 상태로 시작하면 /api/v1/vfx/items, /api/v1/sota/ 등이 500 응답." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  💾  Phase 1 통합 migration 은 destructive 입니다 (sota_items 테이블 drop)." -ForegroundColor Magenta
+    Write-Host "      백업 추천: docker compose exec db pg_dump -U hub hub > backup_before_migrate.sql" -ForegroundColor Magenta
+    Write-Host ""
+    $resp = Read-Host "  지금 alembic upgrade head 를 실행할까요? (y/N)"
+    if ($resp -eq 'y' -or $resp -eq 'Y') {
+        & .\.venv\Scripts\alembic.exe upgrade head
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  ✓ 마이그레이션 완료" -ForegroundColor Green
+        } else {
+            Write-Host "  ❌ 마이그레이션 실패 — 백엔드 시작 중단. 로그 확인 후 수동 진행하세요." -ForegroundColor Red
+            Pop-Location
+            exit 1
+        }
+    } else {
+        Write-Host "  ⏭️   skip — 백엔드는 시작하지만 일부 endpoint 가 500 응답할 수 있음." -ForegroundColor Yellow
+    }
+}
+Pop-Location
+
+# 3) Backend (새 PowerShell 창)
 # Windows 의 ProactorEventLoop 가 async PG driver 와 비호환 (Issue #1).
 # run_server.py 가 WindowsSelectorEventLoopPolicy 를 먼저 설정 후 uvicorn.run.
-Write-Host "[2/3] Backend 시작 (새 창)..." -ForegroundColor Yellow
+Write-Host "[3/4] Backend 시작 (새 창)..." -ForegroundColor Yellow
 $backendCmd = @"
 Set-Location '$ProjectRoot\backend'
 .\.venv\Scripts\Activate.ps1
@@ -38,9 +89,9 @@ python run_server.py --reload
 Start-Process powershell -ArgumentList "-NoExit", "-Command", $backendCmd
 Write-Host "  ✓ Backend 창 열림" -ForegroundColor Green
 
-# 3) Frontend (새 PowerShell 창)
+# 4) Frontend (새 PowerShell 창)
 Start-Sleep -Seconds 2
-Write-Host "[3/3] Frontend 시작 (새 창)..." -ForegroundColor Yellow
+Write-Host "[4/4] Frontend 시작 (새 창)..." -ForegroundColor Yellow
 $frontendCmd = @"
 Set-Location '$ProjectRoot\frontend'
 Write-Host '=== Frontend (vite :3000) ===' -ForegroundColor Cyan
@@ -51,7 +102,7 @@ Write-Host "  ✓ Frontend 창 열림" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "=== 기동 완료 ===" -ForegroundColor Cyan
-Write-Host "  - Backend:  http://localhost:8000  (API docs: /api/docs)"
+Write-Host "  - Backend:  http://localhost:8000  (API docs: /api/docs, health: /api/health)"
 Write-Host "  - Frontend: http://localhost:3000"
 Write-Host ""
 Write-Host "종료: .\stop.ps1 또는 각 창에서 Ctrl+C"
