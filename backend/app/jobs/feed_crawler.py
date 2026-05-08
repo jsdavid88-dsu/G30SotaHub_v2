@@ -18,7 +18,7 @@ from datetime import datetime
 from pathlib import Path
 
 import yaml
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import SessionLocal
@@ -42,7 +42,7 @@ async def _persist(db: AsyncSession, items: list[dict]) -> int:
     new_count = 0
     for it in items:
         stmt = (
-            sqlite_insert(FeedItem)
+            pg_insert(FeedItem)
             .values(
                 source=it["source"],
                 external_id=it["external_id"],

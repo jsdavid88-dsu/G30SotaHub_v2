@@ -14,7 +14,7 @@ import logging
 import re
 
 from sqlalchemy import select, update as sql_update
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants_vfx import SOURCE_ORDER
@@ -129,7 +129,7 @@ async def _assign_groups(db: AsyncSession, items: list[Item]) -> tuple[int, int]
             group_id = fp_to_group[fp]
         else:
             stmt = (
-                sqlite_insert(ItemGroup)
+                pg_insert(ItemGroup)
                 .values(
                     fingerprint=fp,
                     canonical_name=item.title[:500] if item.title else fp,

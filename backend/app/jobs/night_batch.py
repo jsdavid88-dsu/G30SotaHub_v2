@@ -19,7 +19,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, func, text, update as sql_update
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import SessionLocal
@@ -82,7 +82,7 @@ async def _process_url_submission(db: AsyncSession, sub: Submission) -> int | No
 
     external_id = hashlib.sha1(sub.input_value.encode()).hexdigest()[:24]
     stmt = (
-        sqlite_insert(Item)
+        pg_insert(Item)
         .values(
             source="submission", external_id=external_id, url=sub.input_value,
             title=(page.get("title") or sub.input_value[:200])[:2000],
@@ -109,7 +109,7 @@ async def _process_keyword_submission(db: AsyncSession, sub: Submission) -> int 
     best = results[0]
     external_id = hashlib.sha1(best["url"].encode()).hexdigest()[:24]
     stmt = (
-        sqlite_insert(Item)
+        pg_insert(Item)
         .values(
             source="submission", external_id=external_id, url=best["url"],
             title=(best.get("title") or sub.input_value)[:2000],
@@ -274,13 +274,14 @@ async def step_detect_promotions() -> dict:
     new_suggestions = 0
 
     async with SessionLocal() as db:
-        # Count free_tags
+        # Count free_tags — PostgreSQL: jsonb_array_elements_text 로 unnest
+        # (SQLite 의 json_each 는 PG 에서 object 만 받아서 array 처리 불가)
         stmt = text("""
-            SELECT j.value AS tag, COUNT(*) AS cnt
-            FROM items, json_each(items.free_tags) AS j
-            WHERE j.value NOT IN ('제보', '_irrelevant')
-            GROUP BY j.value
-            HAVING cnt >= :threshold
+            SELECT tag, COUNT(*) AS cnt
+            FROM items, jsonb_array_elements_text(items.free_tags::jsonb) AS tag
+            WHERE tag NOT IN ('제보', '_irrelevant')
+            GROUP BY tag
+            HAVING COUNT(*) >= :threshold
             ORDER BY cnt DESC
         """)
         rows = (await db.execute(stmt, {"threshold": PROMOTION_THRESHOLD})).fetchall()
@@ -296,8 +297,10 @@ async def step_detect_promotions() -> dict:
 
             # Get sample titles for this tag
             sample_stmt = text("""
-                SELECT i.title FROM items i, json_each(i.free_tags) AS j
-                WHERE j.value = :tag LIMIT 5
+                SELECT i.title
+                FROM items i, jsonb_array_elements_text(i.free_tags::jsonb) AS tag
+                WHERE tag = :tag
+                LIMIT 5
             """)
             samples = [r[0] for r in (await db.execute(sample_stmt, {"tag": tag})).fetchall()]
 

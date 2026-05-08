@@ -20,13 +20,13 @@ async def tag_counts(
     db: AsyncSession = Depends(get_db),
 ):
     """Aggregate free_tags across all items. Returns [{tag, count}] sorted by count desc."""
-    # SQLite JSON: each item.free_tags is a JSON array like ["comfyui", "workflow"]
-    # We need to unnest and count
+    # PostgreSQL JSON: free_tags is a JSON array like ["comfyui", "workflow"]
+    # jsonb_array_elements_text 로 unnest (SQLite 의 json_each 가 PG 에서는 object 만 받음)
     stmt = text("""
-        SELECT j.value AS tag, COUNT(*) AS cnt
-        FROM items, json_each(items.free_tags) AS j
-        GROUP BY j.value
-        HAVING cnt >= :min_count
+        SELECT tag, COUNT(*) AS cnt
+        FROM items, jsonb_array_elements_text(items.free_tags::jsonb) AS tag
+        GROUP BY tag
+        HAVING COUNT(*) >= :min_count
         ORDER BY cnt DESC
     """)
     rows = (await db.execute(stmt, {"min_count": min_count})).fetchall()

@@ -13,7 +13,7 @@ import asyncio
 import logging
 
 from sqlalchemy import select
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import SessionLocal
@@ -60,7 +60,7 @@ async def build_lineage_for_item(db: AsyncSession, item: Item) -> int:
         if not parent_id or parent_id == item.id:
             continue
         stmt = (
-            sqlite_insert(LineageEdge)
+            pg_insert(LineageEdge)
             .values(parent_id=parent_id, child_id=item.id, relationship_type="cites")
             .on_conflict_do_nothing(index_elements=["parent_id", "child_id"])
         )
@@ -76,7 +76,7 @@ async def build_lineage_for_item(db: AsyncSession, item: Item) -> int:
         if not child_id or child_id == item.id:
             continue
         stmt = (
-            sqlite_insert(LineageEdge)
+            pg_insert(LineageEdge)
             .values(parent_id=item.id, child_id=child_id, relationship_type="cited_by")
             .on_conflict_do_nothing(index_elements=["parent_id", "child_id"])
         )

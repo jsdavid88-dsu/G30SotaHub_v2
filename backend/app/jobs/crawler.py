@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 
 from sqlalchemy import select
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants_vfx import FETCH_LIMITS, SOURCES
@@ -170,7 +170,7 @@ async def _persist_items(
 
         # Upsert item by (source, external_id)
         stmt = (
-            sqlite_insert(Item)
+            pg_insert(Item)
             .values(
                 source=item.source,
                 external_id=item.external_id,
@@ -215,7 +215,7 @@ async def _persist_items(
             if not cat:
                 continue
             link_stmt = (
-                sqlite_insert(ItemCategory)
+                pg_insert(ItemCategory)
                 .values(item_id=row, category_id=cat.id)
                 .on_conflict_do_nothing(index_elements=["item_id", "category_id"])
             )
