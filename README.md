@@ -44,7 +44,11 @@ git pull
 
 `.\start.ps1` 가 alembic 버전 검증해서 신규 마이그레이션 펜딩이면 **백업 권고 + y/N 프롬프트** 띄움. **destructive migration 가능성 있는 (예: Phase 1 통합) 경우 PG 백업 강력 권장**:
 ```powershell
-docker compose exec db pg_dump -U hub hub > backup_before_migrate.sql
+# native Postgres (5090 PC 등)
+pg_dump -U hub -h localhost hub > backup_before_migrate.sql
+
+# (참고) docker compose 환경이면
+# docker compose exec db pg_dump -U hub hub > backup_before_migrate.sql
 ```
 
 수동 적용 원하면:

@@ -61,7 +61,7 @@ async def _check_alembic_head() -> None:
             log.error("      alembic upgrade head")
             log.error("")
             log.error("    적용 전 PG 백업 권장 (Phase 1 통합은 destructive):")
-            log.error("      docker compose exec db pg_dump -U hub hub > backup.sql")
+            log.error("      pg_dump -U hub -h localhost hub > backup.sql   # native Postgres")
             log.error("")
             log.error("    이 상태로는 /api/v1/vfx/items, /api/v1/sota/ 등이 500 응답함 (Issue #9).")
             log.error(banner)
