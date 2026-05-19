@@ -77,7 +77,14 @@ def _call_gemma(system: str, user: str, temperature: float = 0.2, max_tokens: in
 
 
 def _parse_json(raw: str) -> Any:
-    """Extract JSON from Gemma response (handles markdown fences)."""
+    """Extract JSON from Gemma response.
+
+    Handles markdown code fences, trailing commas, and (most importantly)
+    truncated arrays — when max_tokens cuts off mid-object, recover the
+    completed objects up to the last full closing brace.
+
+    Issue #8 fix: 중첩 안전망 — max_tokens 한계 도달해도 일부라도 살림.
+    """
     raw = raw.strip()
     if raw.startswith("```"):
         lines = raw.splitlines()
@@ -86,20 +93,43 @@ def _parse_json(raw: str) -> Any:
             lines = lines[:-1]
         raw = "\n".join(lines)
 
-    # Find JSON array or object
+    # 1차: 정상 파싱 + trailing comma 보정
     for start_char, end_char in [("[", "]"), ("{", "}")]:
         start = raw.find(start_char)
         end = raw.rfind(end_char)
         if start >= 0 and end > start:
-            try:
-                return json.loads(raw[start:end + 1])
-            except json.JSONDecodeError:
-                # Try fixing trailing comma
-                fixed = raw[start:end + 1].replace(",\n]", "\n]").replace(",]", "]")
+            candidate = raw[start:end + 1]
+            for attempt in (
+                candidate,
+                candidate
+                    .replace(",\n]", "\n]").replace(",]", "]")
+                    .replace(",\n}", "\n}").replace(",}", "}"),
+            ):
                 try:
-                    return json.loads(fixed)
+                    return json.loads(attempt)
                 except json.JSONDecodeError:
                     continue
+
+    # 2차: Truncation recovery — array 가 mid-object 에서 잘렸을 때
+    # 완전한 } 까지만 살려서 배열로 복구. 5개 중 3개라도 살리는 게 0개보다 낫음.
+    arr_start = raw.find("[")
+    if arr_start >= 0:
+        chunk = raw[arr_start + 1:]
+        last_close = chunk.rfind("}")
+        if last_close >= 0:
+            truncated = "[" + chunk[:last_close + 1] + "]"
+            # 닫힘 직전 trailing comma 만 보정
+            truncated = truncated.replace(",]", "]")
+            try:
+                result = json.loads(truncated)
+                logger.warning(
+                    f"[arca] truncation recovery: salvaged {len(result) if isinstance(result, list) else '?'} "
+                    f"objects from raw_len={len(raw)} response"
+                )
+                return result
+            except json.JSONDecodeError:
+                pass
+
     return None
 
 
