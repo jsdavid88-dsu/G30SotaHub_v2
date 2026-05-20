@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useRole, isPrivileged, type Role } from '../contexts/RoleContext'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../api/client'
+import ActiveResearchSection from '../components/ActiveResearchSection'
 
 // ─── Types ───
 type StudentRow = { name: string; type: string; project: string; dailyStatus: string; attendance: string }
@@ -312,6 +313,9 @@ function ProfessorView() {
           </div>
         </div>
       </div>
+
+      {/* 진행 중인 연구 (SOTA 통합) — 전체 */}
+      <ActiveResearchSection scope="all" limit={12} />
 
       {/* Main grid: Students + Issues/Milestones */}
       <div className="dash-grid-2col">
@@ -704,6 +708,9 @@ function StudentView() {
         </div>
       </div>
 
+      {/* 내 진행 중인 연구 (SOTA 통합 — 본인 배정) */}
+      <ActiveResearchSection scope="mine" limit={12} />
+
       {/* Main grid: Tasks + Schedule */}
       <div className="dash-grid-2col">
         {/* Task list with details */}
@@ -890,6 +897,9 @@ function ExternalView() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* 내 진행 중인 연구 (모터헤드 입장 — 본인 배정만) */}
+      <ActiveResearchSection scope="mine" limit={12} />
+
       {projects.map((project: any, pi: number) => (
         <div key={project.id || pi} className={`opacity-0 animate-fade-in stagger-${pi + 1}`}>
           <div style={{ ...cardStyle, overflow: 'hidden' }}>
