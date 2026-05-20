@@ -36,25 +36,21 @@ export default function Login() {
         {/* Logo */}
         <div className="relative z-10 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center">
-            <span className="text-white font-bold text-lg">R</span>
+            <span className="text-white font-bold text-lg">G</span>
           </div>
-          <span className="text-white font-semibold text-lg tracking-tight">R&D Hub</span>
+          <span className="text-white font-semibold text-lg tracking-tight">G30 SOTA Hub</span>
         </div>
 
-        {/* Content */}
+        {/* Content — 사실 한 줄. 카피 없음. */}
         <div className="relative z-10">
-          <h1 className="font-display text-[44px] text-white leading-tight tracking-tight">
-            연구의 새로운<br />
-            <span className="text-white/50">패러다임.</span>
+          <h1 className="font-display text-[40px] text-white leading-tight tracking-tight">
+            연구실 협업<span className="text-white/40"> · </span>SOTA 추적
           </h1>
-          <p className="text-sidebar-text text-[15px] mt-4 max-w-md leading-relaxed">
-            Glocal R&D Hub v3 — 연구 과제 관리, 성과 추적, 팀 협업을 하나의 플랫폼에서.
-          </p>
         </div>
 
         {/* Footer */}
         <p className="relative z-10 text-sidebar-text/40 text-[12px]">
-          © 2026 Antigravity Lab · Glocal30 Hub
+          G30SotaHub v2
         </p>
 
         {/* Decorative gradient orb */}
@@ -68,13 +64,12 @@ export default function Login() {
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-3 mb-10">
             <div className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center">
-              <span className="text-white font-bold text-lg">R</span>
+              <span className="text-white font-bold text-lg">G</span>
             </div>
-            <span className="font-semibold text-lg tracking-tight text-text-primary">R&D Hub</span>
+            <span className="font-semibold text-lg tracking-tight text-text-primary">G30 SOTA Hub</span>
           </div>
 
-          <h2 className="font-display text-2xl text-text-primary tracking-tight">로그인</h2>
-          <p className="text-text-secondary text-[14px] mt-1 mb-8">워크스페이스에 접속하세요</p>
+          <h2 className="font-display text-2xl text-text-primary tracking-tight mb-8">로그인</h2>
 
           {/* Google Sign In */}
           <button
