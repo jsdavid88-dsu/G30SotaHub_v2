@@ -12,6 +12,37 @@ interface AssignedTask {
   project_name?: string
 }
 
+// SOTA 배정 — 학생이 매일 데일리 쓰면서 inline 메모 (= SotaReview) 제출
+interface MySotaAssignment {
+  id: string
+  sota_item_id: number
+  status: string                       // recommended/assigned/in_review/submitted/approved/rejected
+  due_date: string | null
+  item_title: string | null            // backend nested (SotaAssignmentResponse.item_*)
+  item_source: string | null
+  item_url: string | null
+  item_lifecycle_status: string | null
+  item_priority: string | null
+  reviews_count: number
+}
+
+const SOTA_STATUS_BADGE: Record<string, { bg: string; color: string; label: string }> = {
+  recommended: { bg: '#f0fdf4', color: '#15803d', label: '추천' },
+  assigned:    { bg: '#e0e7ff', color: '#4338ca', label: '배정됨' },
+  in_review:   { bg: '#fef3c7', color: '#b45309', label: '리뷰중' },
+  submitted:   { bg: '#dbeafe', color: '#1d4ed8', label: '제출완료' },
+  approved:    { bg: '#d1fae5', color: '#047857', label: '승인' },
+  rejected:    { bg: '#fee2e2', color: '#dc2626', label: '반려' },
+}
+
+const SOTA_LIFECYCLE_BADGE: Record<string, { bg: string; color: string; label: string }> = {
+  research:   { bg: '#f1f5f9', color: '#475569', label: '연구' },
+  dev:        { bg: '#dbeafe', color: '#1d4ed8', label: '개발' },
+  testing:    { bg: '#fef3c7', color: '#b45309', label: '테스트' },
+  production: { bg: '#d1fae5', color: '#047857', label: '운영' },
+  deprecated: { bg: '#fee2e2', color: '#dc2626', label: '폐기' },
+}
+
 interface BlockMeta {
   task_id: string | null
   project_id: string | null
@@ -298,6 +329,12 @@ export default function DailyWrite() {
   const [taskStatuses, setTaskStatuses] = useState<Record<string, TaskStatus>>({})
   const [tasksExpanded, setTasksExpanded] = useState(true)
 
+  // SOTA — 학생이 inline 으로 메모 작성 + 제출
+  const [sotaAssignments, setSotaAssignments] = useState<MySotaAssignment[]>([])
+  const [sotaMemos, setSotaMemos] = useState<Record<string, string>>({})
+  const [sotaSubmitting, setSotaSubmitting] = useState<string | null>(null)
+  const [sotaExpanded, setSotaExpanded] = useState(true)
+
   // Save state
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState('')
@@ -380,6 +417,58 @@ export default function DailyWrite() {
       } catch { /* Backend not available */ }
     })()
   }, [])
+
+  // ── Fetch SOTA assignments (active 만) ──
+  const refreshSota = useCallback(async () => {
+    try {
+      const res: any = await api.sota.my()
+      const list = Array.isArray(res) ? res : (res?.data || [])
+      // active 만: 제출 안 한 거 위주. submitted/approved/rejected 는 숨김
+      const active = list.filter((a: any) =>
+        !['submitted', 'approved', 'rejected'].includes(a.status)
+      )
+      const mapped: MySotaAssignment[] = active.map((a: any) => ({
+        id: String(a.id),
+        sota_item_id: Number(a.sota_item_id),
+        status: a.status,
+        due_date: a.due_date,
+        item_title: a.item_title || `Item #${a.sota_item_id}`,
+        item_source: a.item_source || null,
+        item_url: a.item_url || null,
+        item_lifecycle_status: a.item_lifecycle_status || null,
+        item_priority: a.item_priority || null,
+        reviews_count: Array.isArray(a.reviews) ? a.reviews.length : 0,
+      }))
+      setSotaAssignments(mapped)
+    } catch { /* Backend not available */ }
+  }, [])
+
+  useEffect(() => { refreshSota() }, [refreshSota])
+
+  // ── SOTA 리뷰 제출 + today 섹션에 자동 라인 추가 ──
+  const submitSotaReview = useCallback(async (a: MySotaAssignment) => {
+    const memo = (sotaMemos[a.id] || '').trim()
+    if (!memo) return
+    setSotaSubmitting(a.id)
+    try {
+      await api.sota.submitReview(a.id, { content: memo })
+      // today 섹션에 자동 append (학생이 데일리 저장 시 DailyBlock 으로 영구화 + 검색 가능)
+      const firstLine = memo.split('\n')[0].slice(0, 100)
+      const linkLine = `[SOTA] ${a.item_title} — ${firstLine}${memo.length > 100 || memo.includes('\n') ? ' ...' : ''}`
+      setSectionContents((prev) => {
+        const todayText = prev.today || ''
+        const sep = todayText.trim() ? '\n\n' : ''
+        return { ...prev, today: todayText + sep + linkLine }
+      })
+      // 카드 사라짐 + 메모 clear
+      setSotaMemos((prev) => { const next = { ...prev }; delete next[a.id]; return next })
+      await refreshSota()
+    } catch (e) {
+      alert(`SOTA 리뷰 제출 실패: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setSotaSubmitting(null)
+    }
+  }, [sotaMemos, refreshSota])
 
   // ── Draft ──
   useEffect(() => {
@@ -714,6 +803,117 @@ export default function DailyWrite() {
                     })}
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── 내 SOTA 배정 — inline 메모 제출 (SotaReview 생성 + today 섹션 자동 append) ── */}
+        {sotaAssignments.length > 0 && (
+          <div className="opacity-0 animate-fade-in stagger-1" style={{ ...cardStyle, overflow: 'hidden' }}>
+            <button
+              onClick={() => setSotaExpanded(!sotaExpanded)}
+              style={{
+                width: '100%', padding: '16px 24px',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' as const,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+                <span style={{ fontSize: 15, fontWeight: 600, color: '#0f172a' }}>내 SOTA 배정</span>
+                <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 400 }}>{sotaAssignments.length}건 (메모 작성 + 제출 = 오늘 활동에 자동 기록)</span>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                style={{ transform: sotaExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+            {sotaExpanded && (
+              <div style={{ padding: '0 24px 16px' }}>
+                {sotaAssignments.map((a) => {
+                  const stBadge = SOTA_STATUS_BADGE[a.status] || { bg: '#f1f5f9', color: '#64748b', label: a.status }
+                  const lcBadge = a.item_lifecycle_status ? SOTA_LIFECYCLE_BADGE[a.item_lifecycle_status] : null
+                  const memo = sotaMemos[a.id] || ''
+                  const submitting = sotaSubmitting === a.id
+                  const overdue = a.due_date && new Date(a.due_date) < new Date(new Date().toDateString())
+                  return (
+                    <div key={a.id} style={{
+                      padding: '12px 14px', borderRadius: 10, marginBottom: 10,
+                      background: '#fafbff', border: '1px solid #eef2ff',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                        <span style={{
+                          padding: '2px 8px', borderRadius: 5, fontSize: 11, fontWeight: 600,
+                          background: stBadge.bg, color: stBadge.color,
+                        }}>{stBadge.label}</span>
+                        {a.item_source && (
+                          <span style={{ fontSize: 11, color: '#64748b', padding: '2px 7px', borderRadius: 5, background: '#f1f5f9' }}>
+                            {a.item_source}
+                          </span>
+                        )}
+                        {lcBadge && (
+                          <span style={{
+                            padding: '2px 7px', borderRadius: 5, fontSize: 11, fontWeight: 600,
+                            background: lcBadge.bg, color: lcBadge.color,
+                          }}>{lcBadge.label}</span>
+                        )}
+                        {a.item_priority && (
+                          <span style={{
+                            padding: '2px 7px', borderRadius: 5, fontSize: 11, fontWeight: 600,
+                            background: a.item_priority === 'P0' ? '#fee2e2' : a.item_priority === 'P1' ? '#fef3c7' : '#f1f5f9',
+                            color: a.item_priority === 'P0' ? '#dc2626' : a.item_priority === 'P1' ? '#b45309' : '#64748b',
+                          }}>{a.item_priority}</span>
+                        )}
+                        <a
+                          href={`/vfx/item/${a.sota_item_id}`}
+                          style={{ fontSize: 13, fontWeight: 500, color: '#0f172a', textDecoration: 'none', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        >
+                          {a.item_title}
+                        </a>
+                        {a.due_date && (
+                          <span style={{ fontSize: 11, color: overdue ? '#dc2626' : '#94a3b8', fontWeight: overdue ? 600 : 400 }}>
+                            마감 {new Date(a.due_date).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}
+                          </span>
+                        )}
+                        {a.reviews_count > 0 && (
+                          <span style={{ fontSize: 10, color: '#94a3b8' }}>이전 리뷰 {a.reviews_count}건</span>
+                        )}
+                      </div>
+                      <textarea
+                        value={memo}
+                        onChange={(e) => setSotaMemos((prev) => ({ ...prev, [a.id]: e.target.value }))}
+                        placeholder="오늘 테스트한 결과 / 메모 — 한 줄 또는 여러 줄. 제출하면 오늘 활동에도 자동 기록됨."
+                        rows={2}
+                        style={{
+                          width: '100%', padding: '8px 10px', borderRadius: 8,
+                          border: '1px solid #e2e8f0', fontSize: 13, outline: 'none',
+                          resize: 'vertical' as const, boxSizing: 'border-box' as const,
+                          lineHeight: 1.5, background: '#fff',
+                          fontFamily: 'inherit',
+                        }}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6, gap: 6 }}>
+                        <button
+                          disabled={!memo.trim() || submitting}
+                          onClick={() => submitSotaReview(a)}
+                          style={{
+                            padding: '5px 12px', borderRadius: 6, border: 'none',
+                            fontSize: 12, fontWeight: 600,
+                            cursor: memo.trim() && !submitting ? 'pointer' : 'not-allowed',
+                            background: memo.trim() && !submitting ? '#7c3aed' : '#e9d5ff',
+                            color: '#fff',
+                            transition: 'all 0.15s',
+                          }}
+                        >
+                          {submitting ? '제출 중...' : '리뷰 제출 + 오늘 기록'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>

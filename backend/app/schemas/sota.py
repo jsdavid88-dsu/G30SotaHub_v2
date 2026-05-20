@@ -103,6 +103,13 @@ class SotaAssignmentResponse(BaseModel):
     created_at: datetime
     reviews: list[SotaReviewResponse] = Field(default_factory=list)
 
+    # Item 핵심 필드 nested (N+1 회피 — DailyWrite/Sota student view 용)
+    item_title: str | None = None
+    item_source: str | None = None
+    item_url: str | None = None
+    item_lifecycle_status: str | None = None
+    item_priority: str | None = None
+
     model_config = {"from_attributes": True}
 
 

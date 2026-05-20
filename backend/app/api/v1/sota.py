@@ -61,6 +61,7 @@ async def _get_assignment_or_404(db: AsyncSession, assignment_id: uuid.UUID) -> 
         .options(
             selectinload(SotaAssignment.assignee),
             selectinload(SotaAssignment.reviews).selectinload(SotaReview.reviewer),
+            selectinload(SotaAssignment.item),  # nested item 필드 응답용
         )
         .where(SotaAssignment.id == assignment_id)
     )
@@ -125,6 +126,12 @@ def _build_review_response(review: SotaReview) -> SotaReviewResponse:
 
 
 def _build_assignment_response(assignment: SotaAssignment) -> SotaAssignmentResponse:
+    # selectinload 로 미리 로드된 item 정보를 nested 로 펴서 전달 (N+1 회피)
+    item = getattr(assignment, "item", None)
+    item_lifecycle = None
+    if item and getattr(item, "lifecycle_status", None):
+        lc = item.lifecycle_status
+        item_lifecycle = lc.value if hasattr(lc, "value") else str(lc)
     return SotaAssignmentResponse(
         id=assignment.id,
         sota_item_id=assignment.sota_item_id,
@@ -135,6 +142,11 @@ def _build_assignment_response(assignment: SotaAssignment) -> SotaAssignmentResp
         due_date=assignment.due_date,
         created_at=assignment.created_at,
         reviews=[_build_review_response(r) for r in (assignment.reviews or [])],
+        item_title=item.title if item else None,
+        item_source=item.source if item else None,
+        item_url=item.url if item else None,
+        item_lifecycle_status=item_lifecycle,
+        item_priority=item.priority if item else None,
     )
 
 
