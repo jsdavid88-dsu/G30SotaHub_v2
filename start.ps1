@@ -51,8 +51,9 @@ $current = & .\.venv\Scripts\alembic.exe current 2>&1 | Out-String
 $heads = & .\.venv\Scripts\alembic.exe heads 2>&1 | Out-String
 
 # alembic current/heads 출력에서 revision 추출
-$currentRev = if ($current -match '([a-f0-9_]+)\s*\(head\)|^([a-f0-9_]+)') { $matches[1] ?? $matches[2] } else { '' }
-$headsRev = if ($heads -match '([a-f0-9_]+)\s*\(head\)|^([a-f0-9_]+)') { $matches[1] ?? $matches[2] } else { '' }
+# (PowerShell 5.1 호환 — null-coalescing `??` 는 7+ 전용이라 if/else 로 풀어서 사용)
+$currentRev = if ($current -match '([a-f0-9_]+)\s*\(head\)|^([a-f0-9_]+)') { if ($matches[1]) { $matches[1] } else { $matches[2] } } else { '' }
+$headsRev   = if ($heads   -match '([a-f0-9_]+)\s*\(head\)|^([a-f0-9_]+)') { if ($matches[1]) { $matches[1] } else { $matches[2] } } else { '' }
 
 if ($currentRev -and $headsRev -and ($currentRev -eq $headsRev)) {
     Write-Host "  ✓ Schema OK (rev=$currentRev)" -ForegroundColor Green
