@@ -12,6 +12,7 @@ from app.models.daily import BlockVisibility, DailyBlock, DailyLog
 from app.models.user import AdvisorRelation, User, UserRole
 from app.schemas.comment import CommentCreate, CommentResponse, CommentUpdate
 from app.services.notifications import create_notification
+from app.services.mentions import create_mention_notifications
 from app.services.web_push import send_push_to_user
 
 router = APIRouter()
@@ -157,6 +158,16 @@ async def create_comment(
             target_type="daily_block",
             target_id=block_id,
         )
+
+    # @mention 알림 (Phase 1A — 본문에서 @user 파싱)
+    await create_mention_notifications(
+        db,
+        text=body.content,
+        actor=current_user,
+        source_label="데일리 댓글",
+        target_type="daily_block",
+        target_id=block_id,
+    )
 
     await db.commit()
     await db.refresh(comment)

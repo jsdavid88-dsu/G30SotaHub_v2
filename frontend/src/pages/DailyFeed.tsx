@@ -4,6 +4,7 @@ import { useRole, isPrivileged } from '../contexts/RoleContext'
 import { api } from '../api/client'
 import MiniCalendar from '../components/MiniCalendar'
 import FeedFilterBar, { type FeedFilters } from '../components/FeedFilterBar'
+import { renderWithMentions } from '../utils/mentions'
 
 // External assigned projects — populated dynamically from API
 
@@ -481,7 +482,7 @@ function SingleComment({
           </div>
         ) : (
           <p style={{ fontSize, color: '#475569', lineHeight: 1.6, margin: '2px 0 0' }}>
-            {comment.content}
+            {renderWithMentions(comment.content || '')}
           </p>
         )}
 

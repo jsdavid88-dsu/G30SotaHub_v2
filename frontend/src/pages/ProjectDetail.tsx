@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useRole, isPrivileged } from '../contexts/RoleContext'
 import { api } from '../api/client'
+import ProjectActivityFeed from '../components/ProjectActivityFeed'
 
 /* ── Types ─────────────────────────────────────── */
 
@@ -866,6 +867,9 @@ export default function ProjectDetail() {
           )}
         </div>
       </div>
+
+      {/* ── 팀 활동 피드 (Phase 1B) ─────────────── */}
+      {id && <ProjectActivityFeed projectId={id} />}
 
       {/* ── Members Section ─────────────────── */}
       <div style={{ ...cardStyle, padding: '24px 28px', marginBottom: 24 }} className="opacity-0 animate-fade-in stagger-1">

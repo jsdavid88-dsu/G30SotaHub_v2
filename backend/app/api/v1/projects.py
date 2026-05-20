@@ -318,3 +318,170 @@ async def remove_member(
 
     await db.delete(member)
     await db.commit()
+
+
+# ── 팀 활동 피드 (Phase 1B) ────────────────────────────────────────────────
+
+
+@router.get("/{project_id}/activity")
+async def project_activity(
+    project_id: uuid.UUID,
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
+):
+    """프로젝트 활동 피드 — 멤버/태스크/데일리/공지/SOTA 통합 시간순.
+
+    응답: [{type, actor_name, summary, target_type, target_id, timestamp}]
+    """
+    from app.models.daily import BlockVisibility, DailyBlock, DailyLog
+    from app.models.announcement import Announcement
+    from app.models import Item
+    from app.models.sota import SotaAssignment, SotaReview
+
+    # Project 존재 확인
+    res = await db.execute(select(Project).where(Project.id == project_id))
+    if res.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    events: list[dict] = []
+
+    # 1) 멤버 합류
+    members_q = await db.execute(
+        select(ProjectMember, User)
+        .join(User, ProjectMember.user_id == User.id)
+        .where(ProjectMember.project_id == project_id)
+        .order_by(ProjectMember.joined_at.desc())
+        .limit(limit)
+    )
+    for member, user in members_q.all():
+        events.append({
+            "type": "member_joined",
+            "actor_name": user.name,
+            "actor_id": str(user.id),
+            "summary": f"{user.name}님이 팀에 합류 ({member.project_role.value if hasattr(member.project_role, 'value') else member.project_role})",
+            "target_type": "project",
+            "target_id": str(project_id),
+            "timestamp": member.joined_at.isoformat() if member.joined_at else None,
+        })
+
+    # 2) Task 생성 / 완료
+    tasks_q = await db.execute(
+        select(Task, User)
+        .outerjoin(User, Task.created_by == User.id)
+        .where(Task.project_id == project_id)
+        .order_by(Task.created_at.desc())
+        .limit(limit)
+    )
+    for task, creator in tasks_q.all():
+        actor_name = creator.name if creator else "—"
+        events.append({
+            "type": "task_created",
+            "actor_name": actor_name,
+            "actor_id": str(creator.id) if creator else None,
+            "summary": f"{actor_name}님이 태스크 추가: {task.title}",
+            "target_type": "task",
+            "target_id": str(task.id),
+            "timestamp": task.created_at.isoformat() if task.created_at else None,
+        })
+        if task.status == TaskStatus.done and task.updated_at:
+            events.append({
+                "type": "task_completed",
+                "actor_name": actor_name,
+                "actor_id": str(creator.id) if creator else None,
+                "summary": f"✓ 태스크 완료: {task.title}",
+                "target_type": "task",
+                "target_id": str(task.id),
+                "timestamp": task.updated_at.isoformat(),
+            })
+
+    # 3) DailyBlock (visibility=project + project_id 매칭)
+    blocks_q = await db.execute(
+        select(DailyBlock, DailyLog, User)
+        .join(DailyLog, DailyBlock.daily_log_id == DailyLog.id)
+        .join(User, DailyLog.author_id == User.id)
+        .where(
+            DailyBlock.project_id == project_id,
+            DailyBlock.visibility == BlockVisibility.project,
+        )
+        .order_by(DailyBlock.created_at.desc())
+        .limit(limit)
+    )
+    for block, _log, user in blocks_q.all():
+        snippet = (block.content or "").replace("\n", " ")[:100]
+        events.append({
+            "type": "daily_block",
+            "actor_name": user.name,
+            "actor_id": str(user.id),
+            "summary": f"{user.name}님의 데일리: {snippet}",
+            "target_type": "daily_block",
+            "target_id": str(block.id),
+            "timestamp": block.created_at.isoformat() if block.created_at else None,
+        })
+
+    # 4) Announcement (audience=project)
+    ann_q = await db.execute(
+        select(Announcement, User)
+        .outerjoin(User, Announcement.author_id == User.id)
+        .where(Announcement.project_id == project_id)
+        .order_by(Announcement.created_at.desc())
+        .limit(limit)
+    )
+    for ann, creator in ann_q.all():
+        actor_name = creator.name if creator else "—"
+        events.append({
+            "type": "announcement",
+            "actor_name": actor_name,
+            "actor_id": str(creator.id) if creator else None,
+            "summary": f"📢 공지: {ann.title}",
+            "target_type": "announcement",
+            "target_id": str(ann.id),
+            "timestamp": ann.created_at.isoformat() if ann.created_at else None,
+        })
+
+    # 5) SotaAssignment 생성 (Item.project_id 매칭)
+    assign_q = await db.execute(
+        select(SotaAssignment, Item, User)
+        .join(Item, SotaAssignment.sota_item_id == Item.id)
+        .join(User, SotaAssignment.assignee_id == User.id)
+        .where(Item.project_id == project_id)
+        .order_by(SotaAssignment.created_at.desc())
+        .limit(limit)
+    )
+    for asg, item, assignee in assign_q.all():
+        events.append({
+            "type": "sota_assigned",
+            "actor_name": assignee.name,
+            "actor_id": str(assignee.id),
+            "summary": f"🎯 {assignee.name}님에게 {item.title[:60]} 배정",
+            "target_type": "item",
+            "target_id": str(item.id),
+            "timestamp": asg.created_at.isoformat() if asg.created_at else None,
+        })
+
+    # 6) SotaReview 작성
+    review_q = await db.execute(
+        select(SotaReview, SotaAssignment, Item, User)
+        .join(SotaAssignment, SotaReview.sota_assignment_id == SotaAssignment.id)
+        .join(Item, SotaAssignment.sota_item_id == Item.id)
+        .join(User, SotaReview.reviewer_id == User.id)
+        .where(Item.project_id == project_id)
+        .order_by(SotaReview.created_at.desc())
+        .limit(limit)
+    )
+    for rev, _asg, item, reviewer in review_q.all():
+        snippet = (rev.content or "").replace("\n", " ")[:80]
+        events.append({
+            "type": "sota_review",
+            "actor_name": reviewer.name,
+            "actor_id": str(reviewer.id),
+            "summary": f"{reviewer.name}: {item.title[:40]} — {snippet}",
+            "target_type": "item",
+            "target_id": str(item.id),
+            "timestamp": rev.created_at.isoformat() if rev.created_at else None,
+        })
+
+    # 시간순 정렬 (최신 먼저) + limit
+    events = [e for e in events if e.get("timestamp")]
+    events.sort(key=lambda e: e["timestamp"], reverse=True)
+    return events[:limit]
