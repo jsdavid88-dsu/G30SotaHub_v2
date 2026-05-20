@@ -91,8 +91,8 @@ Write-Host ""
 Write-Host "=== Setup 완료 ===" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "이제 .\start.ps1 로 실행하세요." -ForegroundColor Green
-Write-Host "  - Backend:  http://localhost:8000  (API docs: /api/docs)"
-Write-Host "  - Frontend: http://localhost:3000"
+Write-Host "  - Backend:  http://localhost:8011  (API docs: /api/docs)"
+Write-Host "  - Frontend: http://localhost:3030"
 Write-Host "  - DB:       localhost:5432 (user=hub, pass=hub, db=hub)"
 Write-Host ""
 Write-Host "다음 단계: PLAN.md (Phase 1 — DB 스키마 마이그레이션)"

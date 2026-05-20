@@ -110,7 +110,8 @@ app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 _origins = [
     settings.FRONTEND_URL,
     "http://localhost:5173",
-    "http://localhost:3000",
+    "http://localhost:3030",  # vite dev (#13)
+    "http://localhost:3000",  # legacy default (호환)
 ] + (settings.cors_extra_origins or [])
 app.add_middleware(
     CORSMiddleware,

@@ -23,7 +23,7 @@ import uvicorn  # noqa: E402  (intentionally imported after policy is set)
 def main() -> None:
     reload = "--reload" in sys.argv or os.getenv("UVICORN_RELOAD") == "1"
     host = os.getenv("UVICORN_HOST", "0.0.0.0")
-    port = int(os.getenv("UVICORN_PORT", "8000"))
+    port = int(os.getenv("UVICORN_PORT", "8011"))  # #13: 머신 포트 충돌 회피
 
     uvicorn.run(
         "app.main:app",

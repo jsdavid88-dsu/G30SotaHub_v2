@@ -92,7 +92,7 @@ Write-Host "[3/3] Backend + Frontend 시작 (새 창 2개)..." -ForegroundColor 
 $backendCmd = @"
 Set-Location '$ProjectRoot\backend'
 .\.venv\Scripts\Activate.ps1
-Write-Host '=== Backend (run_server.py :8000, --reload) ===' -ForegroundColor Cyan
+Write-Host '=== Backend (run_server.py :8011, --reload) ===' -ForegroundColor Cyan
 python run_server.py --reload
 "@
 Start-Process powershell -ArgumentList "-NoExit", "-Command", $backendCmd
@@ -101,7 +101,7 @@ Write-Host "  ✓ Backend 창 열림" -ForegroundColor Green
 Start-Sleep -Seconds 2
 $frontendCmd = @"
 Set-Location '$ProjectRoot\frontend'
-Write-Host '=== Frontend (vite :3000) ===' -ForegroundColor Cyan
+Write-Host '=== Frontend (vite :3030) ===' -ForegroundColor Cyan
 npm run dev
 "@
 Start-Process powershell -ArgumentList "-NoExit", "-Command", $frontendCmd
@@ -109,7 +109,7 @@ Write-Host "  ✓ Frontend 창 열림" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "=== 기동 완료 ===" -ForegroundColor Cyan
-Write-Host "  - Backend:  http://localhost:8000  (API docs: /api/docs, health: /api/health)"
-Write-Host "  - Frontend: http://localhost:3000"
+Write-Host "  - Backend:  http://localhost:8011  (API docs: /api/docs, health: /api/health)"
+Write-Host "  - Frontend: http://localhost:3030"
 Write-Host ""
 Write-Host "종료: 각 PowerShell 창에서 Ctrl+C"

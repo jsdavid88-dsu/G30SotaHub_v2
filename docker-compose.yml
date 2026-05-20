@@ -27,7 +27,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://hub:${DB_PASSWORD:-hub}@db:5432/hub
     ports:
-      - "8000:8000"
+      - "8011:8011"
     volumes:
       - ./backend:/app
 
@@ -37,7 +37,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "3000:3000"
+      - "3030:3030"
     volumes:
       - ./frontend:/app
       - /app/node_modules

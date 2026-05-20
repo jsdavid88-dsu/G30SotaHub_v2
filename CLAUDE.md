@@ -263,7 +263,7 @@ python -m venv .venv && .venv\Scripts\activate  # Windows
 pip install -r requirements.txt
 alembic upgrade head
 python seed.py  # 테스트 데이터 주입
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8011 --reload
 
 # 프론트엔드
 cd frontend
@@ -285,11 +285,11 @@ docker compose up --build
 DATABASE_URL=postgresql+asyncpg://hub:hub@localhost:5432/hub
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
-GOOGLE_REDIRECT_URI=http://localhost:8000/api/v1/auth/callback
+GOOGLE_REDIRECT_URI=http://localhost:8011/api/v1/auth/callback
 SECRET_KEY=change-me-in-production
 ENCRYPTION_KEY=        # Fernet key (비워두면 SECRET_KEY에서 파생)
 DEBUG=true             # dev-login 활성화
-FRONTEND_URL=http://localhost:3000
+FRONTEND_URL=http://localhost:3030
 GOOGLE_CALENDAR_ENABLED=true
 ```
 

@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # Google OAuth
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
-    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/callback"
+    GOOGLE_REDIRECT_URI: str = "http://localhost:8011/api/v1/auth/callback"
 
     # Session
     SECRET_KEY: str = "change-me-in-production"
@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     VAPID_SUBJECT: str = "mailto:admin@glocal30hub.com"
 
     # Frontend
-    FRONTEND_URL: str = "http://localhost:3000"
+    FRONTEND_URL: str = "http://localhost:3030"
 
     # =========================================================================
     # VFX SOTA Monitor 통합 설정 (vfx-sota-monitor 흡수)

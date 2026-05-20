@@ -13,7 +13,7 @@ export default defineConfig({
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
 
   use: {
-    baseURL: 'http://127.0.0.1:3000',
+    baseURL: 'http://127.0.0.1:3030',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -29,7 +29,7 @@ export default defineConfig({
   webServer: [
     {
       command: 'cd ../backend && uvicorn app.main:app --host 127.0.0.1 --port 8000',
-      url: 'http://127.0.0.1:8000/api/health',
+      url: 'http://127.0.0.1:8011/api/health',
       reuseExistingServer: true,
       timeout: 60_000,
       stdout: 'ignore',
@@ -37,7 +37,7 @@ export default defineConfig({
     },
     {
       command: 'npm run dev -- --host 127.0.0.1 --port 3000',
-      url: 'http://127.0.0.1:3000',
+      url: 'http://127.0.0.1:3030',
       reuseExistingServer: true,
       timeout: 60_000,
       stdout: 'ignore',

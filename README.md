@@ -63,13 +63,13 @@ alembic upgrade head
 ### 🩺 서버 상태 빠른 확인
 ```powershell
 # schema_ok=false 이면 마이그레이션 펜딩 (Issue #9)
-curl http://localhost:8000/api/health
+curl http://localhost:8011/api/health
 ```
 
 접속:
-- **Frontend** http://localhost:3000 — Hub 일상 협업 (대시보드, 데일리, 프로젝트, 캘린더, ...)
-- **VFX SOTA**  http://localhost:3000/vfx — VFX 자동 수집 + 카테고리 + 계보 그래프 + 피드 + 제보
-- **API 문서** http://localhost:8000/api/docs
+- **Frontend** http://localhost:3030 — Hub 일상 협업 (대시보드, 데일리, 프로젝트, 캘린더, ...)
+- **VFX SOTA**  http://localhost:3030/vfx — VFX 자동 수집 + 카테고리 + 계보 그래프 + 피드 + 제보
+- **API 문서** http://localhost:8011/api/docs
 
 종료:
 ```powershell
@@ -85,7 +85,7 @@ curl http://localhost:8000/api/health
 | **연구실 협업** (Hub 베이스) | `glocal30Hub` | Google OAuth, 데일리 로그·블록, 주간 노트, 프로젝트·태스크(칸반), 출결, 공지사항, 푸시, 캘린더 동기화, 보고서, SOTA 배정·리뷰 |
 | **자동 SOTA 수집** (VFX 흡수) | `vfx-sota-monitor` | arXiv / GitHub / HuggingFace / Reddit / X 자동 크롤, 키워드 스코어링, Arca AI 에이전트 분석, 카테고리 자동 태깅, 기술 계보 그래프, 사용자 제보 큐 |
 
-같은 Postgres DB · 같은 FastAPI · 같은 Vite 앱 · 같은 포트(3000/8000). 두 인증은 일단 분리 (Phase 4 에서 통합).
+같은 Postgres DB · 같은 FastAPI · 같은 Vite 앱 · 같은 포트(3030/8011). 두 인증은 일단 분리 (Phase 4 에서 통합).
 
 ---
 
@@ -110,7 +110,7 @@ curl http://localhost:8000/api/health
 ### Backend API
 - `GET /api/v1/users`, `/projects`, `/daily-blocks`, ... (Hub 기존)
 - `GET /api/v1/vfx/items`, `/categories`, `/feed`, ... (VFX 흡수, prefix `/vfx`)
-- 전체: http://localhost:8000/api/docs
+- 전체: http://localhost:8011/api/docs
 
 ---
 
@@ -160,7 +160,7 @@ ollama pull gemma4:26b
 ```powershell
 cd ai_cluster_worker
 copy config.example.yaml config.yaml
-# config.yaml 편집: MAIN_PC_URL=http://<5090-ip>:8000
+# config.yaml 편집: MAIN_PC_URL=http://<5090-ip>:8011
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
@@ -276,7 +276,7 @@ G30SotaHub_v2/
 | `ConnectionDoesNotExistError` | DB pool stale | 백엔드 재시작 (이미 pool_pre_ping 설정돼 있음) |
 | `403` 모든 api | 사용자 status pending | DEBUG=true 면 자동 active. 아니면 admin 이 status 변경 |
 | 첫 실행 시 alembic 실패 | VFX 마이그 SQLite→Postgres 호환 일부 미검증 | issue 등록 또는 Phase 1 정비 |
-| 포트 3000 충돌 | 기존 Hub 이미 실행 중 | 그 프로세스 종료 후 `start.ps1` |
+| 포트 3030 충돌 | 기존 Hub 이미 실행 중 | 그 프로세스 종료 후 `start.ps1` |
 
 ---
 
