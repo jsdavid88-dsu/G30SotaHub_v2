@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight } from "lucide-react";
 import { fetchItems } from "../api/items";
 import type { Category } from "../types";
@@ -11,7 +11,16 @@ import { useViewMode } from "../utils/viewMode";
 import { dedup } from "../utils/dedup";
 import { cardStyle, sectionHeaderStyle, badgeStyle } from "../design";
 
-export default function CategorySection({ category }: { category: Category }) {
+type AssignReq = { itemId: number; mode: "assign" | "motorhead" };
+
+export default function CategorySection({
+  category,
+  onRequestAssign,
+}: {
+  category: Category;
+  onRequestAssign?: (req: AssignReq) => void;
+}) {
+  const qc = useQueryClient();
   const [viewMode] = useViewMode();
   // table 모드면 좀 더 많이 가져와서 한 번에 보여줌
   const limit = viewMode === "table" ? 30 : 12;
@@ -24,6 +33,8 @@ export default function CategorySection({ category }: { category: Category }) {
   const items = viewMode === "table" ? deduped : deduped.slice(0, 6);
 
   if (items.length === 0 && category.item_count === 0) return null;
+
+  const refreshItems = () => qc.invalidateQueries({ queryKey: ["items"] });
 
   return (
     <section style={{ ...cardStyle, overflow: "hidden" }}>
@@ -70,7 +81,14 @@ export default function CategorySection({ category }: { category: Category }) {
             수집된 아이템이 없습니다
           </div>
         ) : viewMode === "table" ? (
-          <ItemTable items={items} sortKey="published_at" sortDir="desc" />
+          <ItemTable
+            items={items}
+            sortKey="published_at"
+            sortDir="desc"
+            showActions
+            onActionDone={refreshItems}
+            onRequestAssign={(itemId, mode) => onRequestAssign?.({ itemId, mode })}
+          />
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
             {items.map((item) => (

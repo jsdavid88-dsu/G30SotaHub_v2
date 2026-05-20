@@ -18,6 +18,7 @@ import CategorySection from "../components/CategorySection";
 import ItemCard from "../components/ItemCard";
 import ItemTable from "../components/ItemTable";
 import ViewToggle from "../components/ViewToggle";
+import AssignModal, { type AssignModalState } from "../components/AssignModal";
 import { useViewMode } from "../utils/viewMode";
 import { dedup } from "../utils/dedup";
 
@@ -295,6 +296,9 @@ export default function Dashboard() {
   const qc = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
   const [viewMode] = useViewMode();
+  const [assignModal, setAssignModal] = useState<AssignModalState>(null);
+
+  const refreshItems = () => qc.invalidateQueries({ queryKey: ["items"] });
 
   const { data: categories = [] } = useQuery({ queryKey: ["categories"], queryFn: fetchCategories });
   const { data: summary } = useQuery({ queryKey: ["summary"], queryFn: fetchSummary });
@@ -452,7 +456,14 @@ export default function Dashboard() {
           </div>
           {viewMode === "table" ? (
             <div style={{ padding: 16 }}>
-              <ItemTable items={p0Items} sortKey="published_at" sortDir="desc" />
+              <ItemTable
+                items={p0Items}
+                sortKey="published_at"
+                sortDir="desc"
+                showActions
+                onActionDone={refreshItems}
+                onRequestAssign={(itemId, mode) => setAssignModal({ itemId, mode })}
+              />
             </div>
           ) : (
             <div style={{ padding: "20px 28px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
@@ -468,10 +479,20 @@ export default function Dashboard() {
       {activeCategories.length > 0 && (
         <div style={{ marginTop: 24, display: "flex", flexDirection: "column", gap: 24 }}>
           {activeCategories.map((cat) => (
-            <CategorySection key={cat.slug} category={cat} />
+            <CategorySection
+              key={cat.slug}
+              category={cat}
+              onRequestAssign={(req) => setAssignModal(req)}
+            />
           ))}
         </div>
       )}
+
+      <AssignModal
+        state={assignModal}
+        onClose={() => setAssignModal(null)}
+        onDone={refreshItems}
+      />
 
       <AddCategoryModal
         open={addOpen}

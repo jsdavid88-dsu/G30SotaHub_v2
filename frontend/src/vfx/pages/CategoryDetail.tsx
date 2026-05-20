@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft } from "lucide-react";
 import { fetchCategory } from "../api/categories";
 import { fetchItems, type ItemFilters, type SortKey as ApiSortKey } from "../api/items";
@@ -8,6 +8,7 @@ import ItemCard from "../components/ItemCard";
 import ItemTable, { type SortKey as TableSortKey, type SortDir } from "../components/ItemTable";
 import FilterPanel from "../components/FilterPanel";
 import ViewToggle from "../components/ViewToggle";
+import AssignModal, { type AssignModalState } from "../components/AssignModal";
 import { useViewMode } from "../utils/viewMode";
 import { dedup } from "../utils/dedup";
 import { cardStyle, sectionHeaderStyle, sectionTitleStyle, badgeStyle, btnGhost } from "../design";
@@ -26,10 +27,16 @@ const TABLE_SORT_TO_API: Record<TableSortKey, ApiSortKey | null> = {
 
 export default function CategoryDetail() {
   const { slug } = useParams<{ slug: string }>();
+  const qc = useQueryClient();
   // default 정렬을 'published' 로 (사용자 요청 — 발표일 우선)
   const [filters, setFilters] = useState<ItemFilters>({ sort: "published" });
   const [viewMode] = useViewMode();
   const [tableSort, setTableSort] = useState<{ key: TableSortKey; dir: SortDir }>({ key: "published_at", dir: "desc" });
+  const [assignModal, setAssignModal] = useState<AssignModalState>(null);
+
+  const refreshItems = () => {
+    qc.invalidateQueries({ queryKey: ["items"] });
+  };
 
   const { data: category } = useQuery({
     queryKey: ["category", slug],
@@ -172,6 +179,9 @@ export default function CategoryDetail() {
               sortKey={tableSort.key}
               sortDir={tableSort.dir}
               onSort={handleTableSort}
+              showActions
+              onActionDone={refreshItems}
+              onRequestAssign={(itemId, mode) => setAssignModal({ itemId, mode })}
             />
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
@@ -186,6 +196,12 @@ export default function CategoryDetail() {
           )}
         </div>
       </div>
+
+      <AssignModal
+        state={assignModal}
+        onClose={() => setAssignModal(null)}
+        onDone={refreshItems}
+      />
     </div>
   );
 }
