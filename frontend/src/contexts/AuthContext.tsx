@@ -66,10 +66,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const devLogin = async (role: UserInfo['role']) => {
     const emailMap: Record<UserInfo['role'], string> = {
+      admin: 'admin@test.com',                  // seed.py 의 admin user
       professor: 'professor@test.com',
       student: 'student1@test.com',
       external: 'external@company.com',
-      admin: 'professor@test.com',
     }
     try {
       const res = await api.auth.devLogin(emailMap[role])

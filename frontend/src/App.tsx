@@ -54,11 +54,15 @@ function App() {
               <Route path="/weekly" element={<Weekly />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="/notifications" element={<Notifications />} />
+              <Route path="/announcements" element={<Navigate to="/notifications" replace />} />
               <Route path="/sota" element={<Sota />} />
               <Route path="/reports" element={<Reports />} />
 
               {/* VFX SOTA Monitor — Hub Layout 의 main 안에 nested. 자체 Sidebar 만 가짐. */}
               <Route path="/vfx/*" element={<VfxApp />} />
+
+              {/* fallback */}
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>
         </BrowserRouter>

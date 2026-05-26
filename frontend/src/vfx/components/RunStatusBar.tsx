@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import { fetchRunStatus, type RunStatus } from "../api/admin";
+import { useRole, isPrivileged } from "../../contexts/RoleContext";
 
 function elapsed(started: string | null): string {
   if (!started) return "";
@@ -24,13 +25,16 @@ function elapsed(started: string | null): string {
 }
 
 export default function RunStatusBar() {
+  const { currentRole } = useRole();
+  const canSeeRun = isPrivileged(currentRole);  // admin / professor 만 admin endpoint polling
   const [status, setStatus] = useState<RunStatus | null>(null);
   const [hideAfterDone, setHideAfterDone] = useState(false);
   const timerRef = useRef<number | null>(null);
   const hideTimerRef = useRef<number | null>(null);
 
-  // 폴링 — 진행 중이면 빠르게(1.5s), 아니면 느리게(6s)
+  // 폴링 — 진행 중이면 빠르게(1.5s), 아니면 느리게(6s). admin/professor 만.
   useEffect(() => {
+    if (!canSeeRun) return;  // student/external 은 admin endpoint 403 — skip
     let cancelled = false;
 
     const tick = async () => {
@@ -75,7 +79,10 @@ export default function RunStatusBar() {
     };
     // intentional: status?.is_running 만 의존 — 다른 필드 변경 시 polling 재시작 X
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status?.is_running]);
+  }, [status?.is_running, canSeeRun]);
+
+  // 권한 없으면 컴포넌트 자체 미렌더
+  if (!canSeeRun) return null;
 
   // 표시 여부 결정
   if (!status) return null;

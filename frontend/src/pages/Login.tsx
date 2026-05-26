@@ -103,6 +103,7 @@ export default function Login() {
                 onChange={(e) => setDevRole(e.target.value as UserInfo['role'])}
                 className="w-full px-4 py-2.5 bg-card border border-border rounded-xl text-[14px] text-text-primary focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent/40 transition-all"
               >
+                <option value="admin">관리자 (Admin)</option>
                 <option value="professor">교수 (Professor)</option>
                 <option value="student">학생 (Student)</option>
                 <option value="external">외부업체 (External)</option>

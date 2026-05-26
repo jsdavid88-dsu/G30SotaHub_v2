@@ -140,7 +140,7 @@ const allNavItems = [
     section: 'Management',
     items: [
       { path: '/sota', label: 'SOTA', icon: SotaIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
-      { path: '/reports', label: 'Reports', icon: ReportsIcon, roles: ['admin', 'professor', 'student'] as Role[] },
+      { path: '/reports', label: 'Reports', icon: ReportsIcon, roles: ['admin', 'professor'] as Role[] },
       { path: '/members', label: 'Students', icon: TeamIcon, roles: ['admin', 'professor'] as Role[] },
       { path: '/calendar', label: 'Calendar', icon: CalendarIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
       { path: '/attendance', label: 'Attendance', icon: AttendanceIcon, roles: ['admin', 'student'] as Role[] },

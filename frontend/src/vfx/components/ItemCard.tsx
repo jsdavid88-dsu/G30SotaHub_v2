@@ -71,16 +71,17 @@ export default function ItemCard({
             </span>
           )}
         </div>
-        <a
-          href={item.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
+        {/* Nested <a> 회피 — wrapping <Link> 안이라 <span> + onClick window.open */}
+        <span
+          role="link"
+          tabIndex={0}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.open(item.url, "_blank", "noopener,noreferrer"); }}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); window.open(item.url, "_blank", "noopener,noreferrer"); } }}
           title="원문 열기"
-          style={{ color: "var(--color-text-muted)", display: "inline-flex" }}
+          style={{ color: "var(--color-text-muted)", display: "inline-flex", cursor: "pointer" }}
         >
           <ExternalLink style={{ width: 14, height: 14 }} />
-        </a>
+        </span>
       </div>
 
       <h3 style={{
@@ -112,19 +113,19 @@ export default function ItemCard({
       {codeLinks.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
           {codeLinks.slice(0, 3).map((link) => (
-            <a
+            <span
               key={link.url}
-              href={link.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
+              role="link"
+              tabIndex={0}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.open(link.url, "_blank", "noopener,noreferrer"); }}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); window.open(link.url, "_blank", "noopener,noreferrer"); } }}
               title={link.description || link.name}
               style={{
                 display: "inline-flex", alignItems: "center", gap: 4,
                 padding: "2px 8px", borderRadius: 6, fontSize: 10,
                 background: "var(--color-success-light)", color: "var(--color-success)",
                 border: "1px solid #a7f3d0",
-                textDecoration: "none",
+                cursor: "pointer",
               }}
             >
               <Github style={{ width: 11, height: 11 }} />
@@ -132,7 +133,7 @@ export default function ItemCard({
                 {link.name.split("/")[1] || link.name}
               </span>
               {link.stars > 0 && <span style={{ opacity: 0.7 }}>★{link.stars}</span>}
-            </a>
+            </span>
           ))}
         </div>
       )}
