@@ -520,9 +520,10 @@ async def list_project_messages(
     limit: int = Query(100, ge=1, le=500),
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
-    _membership: ProjectMember = Depends(require_project_membership),
+    current_user: User = Depends(get_current_user),
 ):
     """Top-level + replies 전부 시간순. Frontend 가 parent_id 로 그룹핑."""
+    await require_project_membership(project_id, current_user, db)
     # top-level + replies 동시 select. 시간순 (오래된 → 최신).
     res = await db.execute(
         select(ProjectMessage)
@@ -548,9 +549,9 @@ async def create_project_message(
     body: ProjectMessageCreate,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-    _membership: ProjectMember = Depends(require_project_membership),
 ):
     """프로젝트 메시지 작성 (또는 reply). @mention 본문 파싱 → Notification 생성."""
+    await require_project_membership(project_id, user, db)
     # parent_id 가 있으면 같은 프로젝트인지 검증
     if body.parent_id:
         parent_res = await db.execute(
@@ -598,9 +599,9 @@ async def update_project_message(
     body: ProjectMessageUpdate,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-    _membership: ProjectMember = Depends(require_project_membership),
 ):
     """본인만 수정 가능. mention 추가/제거는 신규 mention 만 알림."""
+    await require_project_membership(project_id, user, db)
     res = await db.execute(
         select(ProjectMessage)
         .options(selectinload(ProjectMessage.author))
@@ -633,9 +634,9 @@ async def delete_project_message(
     message_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-    _membership: ProjectMember = Depends(require_project_membership),
 ):
     """본인 또는 admin 만 삭제."""
+    await require_project_membership(project_id, user, db)
     res = await db.execute(
         select(ProjectMessage)
         .where(ProjectMessage.id == message_id, ProjectMessage.project_id == project_id)
