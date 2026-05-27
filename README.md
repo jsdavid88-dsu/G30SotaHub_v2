@@ -17,12 +17,15 @@
 | Node 22+ | 필수 | `node --version` |
 | Docker Desktop | 필수 | Postgres 컨테이너용 (또는 native PostgreSQL 16 직접 설치) |
 | **Ollama + gemma4:26b** | **선택 (강력 권장)** | **[야간 배치] 의 Gemma 4 분석 동작 조건.** `ollama pull gemma4:26b` (~16GB VRAM) |
+| **ffmpeg** | **선택 (영상 첨부 시 권장)** | 영상 thumbnail / duration / dimension 추출. `winget install ffmpeg`. 미설치 시 영상 자체는 OK, 썸네일만 skip. |
 | GitHub PAT | 선택 | rate limit 완화 (anonymous 60req/h) |
 | HF token | 선택 | rate limit 완화 |
 | Reddit Client ID/Secret | 선택 | 없으면 Reddit 크롤 skip |
 | NAS 네트워크 드라이브 | 선택 | Phase 3 영상 첨부용 (`M:\sota_files\`) |
 
 `.env.example` 의 각 항목 주석에 발급 URL · skip 시 영향 다 적혀있음. 본인 필요한 만큼만 채우면 됨.
+
+> **5090 PC 운영자 (또는 거기서 도는 클로드) 는 [`SETUP_5090.md`](SETUP_5090.md) 부터 읽으세요.** 환경 셋업 + 일상 명령 + 트러블슈팅 한 곳.
 
 ### 한 방 설치
 ```powershell

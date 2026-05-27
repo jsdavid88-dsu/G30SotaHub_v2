@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     # NAS / Storage (Phase 3 영상 첨부)
     nas_base_path: str = ""  # 예: "M:\\sota_files" — 비어있으면 backend/uploads/ fallback
 
+    # Phase 2.5 — 첨부 storage base.
+    # 지금: ./backend/uploads/ (개발). 나중 NAS: M:\sota_files\
+    # NAS 이전 시 robocopy + env 변경만으로 끝 (DB 변경 X).
+    storage_base_path: str = "./backend/uploads/"
+
     # APScheduler 토글 (테스트 / alembic 실행 시 비활성화)
     scheduler_enabled: bool = True
 

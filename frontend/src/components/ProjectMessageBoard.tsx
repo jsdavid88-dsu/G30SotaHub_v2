@@ -6,6 +6,8 @@
 // - 본인 메시지 edit/delete
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import AttachmentUploader, { AttachmentChip, type UploadedAttachment } from './AttachmentUploader'
+import MediaViewer, { type MediaItem } from './MediaViewer'
 
 type Message = {
   id: string
@@ -72,15 +74,18 @@ function renderBody(body: string): React.ReactNode {
 export default function ProjectMessageBoard({ projectId }: { projectId: string }) {
   const { user } = useAuth()
   const [messages, setMessages] = useState<Message[]>([])
+  const [attachmentsByMsg, setAttachmentsByMsg] = useState<Record<string, UploadedAttachment[]>>({})
   const [loading, setLoading] = useState(true)
   const [newBody, setNewBody] = useState('')
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])  // 게시 전 stash
   const [posting, setPosting] = useState(false)
-  const [replyTo, setReplyTo] = useState<string | null>(null)  // parent_id of in-progress reply
+  const [replyTo, setReplyTo] = useState<string | null>(null)
   const [replyBody, setReplyBody] = useState('')
   const [replyPosting, setReplyPosting] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editBody, setEditBody] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [viewerItem, setViewerItem] = useState<MediaItem | null>(null)
 
   const fetchMessages = useCallback(async () => {
     try {
@@ -88,18 +93,57 @@ export default function ProjectMessageBoard({ projectId }: { projectId: string }
         headers: getHeaders(),
       })
       if (!res.ok) {
-        // 403 (member 아님) 또는 404 → 그냥 빈 상태로
         setMessages([])
         return
       }
       const data = await res.json()
-      setMessages(Array.isArray(data) ? data : (data.data || []))
+      const list: Message[] = Array.isArray(data) ? data : (data.data || [])
+      setMessages(list)
+
+      // 각 메시지의 첨부 일괄 조회 (parallel)
+      const results = await Promise.allSettled(list.map(async (m) => {
+        const attRes = await fetch(
+          `/api/v1/attachments?owner_type=project_message&owner_id=${m.id}`,
+          { headers: getHeaders() }
+        )
+        if (!attRes.ok) return [m.id, []] as const
+        const arr: UploadedAttachment[] = await attRes.json()
+        return [m.id, arr] as const
+      }))
+      const map: Record<string, UploadedAttachment[]> = {}
+      for (const r of results) {
+        if (r.status === 'fulfilled') {
+          const [id, arr] = r.value
+          if (arr.length > 0) map[id] = arr
+        }
+      }
+      setAttachmentsByMsg(map)
     } catch {
       // network — silent
     } finally {
       setLoading(false)
     }
   }, [projectId])
+
+  // 파일 첨부 업로드 (메시지 작성 시 사용)
+  const uploadAttachments = async (messageId: string, files: File[]): Promise<void> => {
+    for (const file of files) {
+      const form = new FormData()
+      form.append('file', file)
+      form.append('owner_type', 'project_message')
+      form.append('owner_id', messageId)
+      const token = localStorage.getItem('token')
+      const res = await fetch('/api/v1/attachments', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(`첨부 업로드 실패 (${res.status}): ${text.slice(0, 200)}`)
+      }
+    }
+  }
 
   useEffect(() => {
     fetchMessages()
@@ -129,16 +173,22 @@ export default function ProjectMessageBoard({ projectId }: { projectId: string }
 
   const submitTop = async () => {
     const body = newBody.trim()
-    if (!body) return
+    if (!body && pendingFiles.length === 0) return
     setPosting(true); setError(null)
     try {
       const res = await fetch(`/api/v1/projects/${projectId}/messages`, {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify({ body }),
+        body: JSON.stringify({ body: body || '(첨부 공유)' }),
       })
       if (!res.ok) throw new Error(`API ${res.status}`)
+      const msg = await res.json()
+      // 첨부 업로드 — 메시지 생성 직후
+      if (pendingFiles.length > 0) {
+        await uploadAttachments(msg.id, pendingFiles)
+      }
       setNewBody('')
+      setPendingFiles([])
       fetchMessages()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -286,6 +336,26 @@ export default function ProjectMessageBoard({ projectId }: { projectId: string }
             {renderBody(m.body)}
           </div>
         )}
+        {/* 첨부 표시 */}
+        {!editing && attachmentsByMsg[m.id] && attachmentsByMsg[m.id].length > 0 && (
+          <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap' }}>
+            {attachmentsByMsg[m.id].map((att) => (
+              <AttachmentChip
+                key={att.id}
+                att={att}
+                onClick={() => setViewerItem({
+                  id: att.id,
+                  media_type: att.media_type,
+                  mime: att.mime,
+                  file_name: att.file_name,
+                  stream_url: att.stream_url,
+                  width: att.width,
+                  height: att.height,
+                })}
+              />
+            ))}
+          </div>
+        )}
         {!isReply && !editing && (
           <div style={{ marginTop: 6 }}>
             <button
@@ -338,19 +408,64 @@ export default function ProjectMessageBoard({ projectId }: { projectId: string }
               fontFamily: 'inherit', lineHeight: 1.5, background: '#fff',
             }}
           />
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-            {error ? (
-              <span style={{ fontSize: 11, color: '#dc2626' }}>{error}</span>
-            ) : <span />}
+          {/* pending 첨부 (게시 전 stash) */}
+          {pendingFiles.length > 0 && (
+            <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {pendingFiles.map((f, idx) => (
+                <span key={idx} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  padding: '3px 8px', borderRadius: 5, fontSize: 11,
+                  background: '#eef2ff', color: '#4338ca',
+                  border: '1px solid #c7d2fe',
+                }}>
+                  {f.type.startsWith('video/') ? '🎬' : '🖼️'}
+                  {f.name.length > 28 ? f.name.slice(0, 26) + '…' : f.name}
+                  <button
+                    onClick={() => setPendingFiles((prev) => prev.filter((_, i) => i !== idx))}
+                    style={{
+                      marginLeft: 2, background: 'none', border: 'none',
+                      color: '#4338ca', cursor: 'pointer', padding: 0, fontSize: 12,
+                    }}
+                    title="제거"
+                  >×</button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <label style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
+                background: 'transparent', color: '#64748b',
+                border: '1px solid #e2e8f0', cursor: posting ? 'not-allowed' : 'pointer',
+                opacity: posting ? 0.5 : 1,
+              }}>
+                📎 이미지/영상
+                <input
+                  type="file"
+                  accept="image/*,video/*"
+                  multiple
+                  disabled={posting}
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || [])
+                    if (files.length) setPendingFiles((prev) => [...prev, ...files])
+                    e.target.value = ''
+                  }}
+                  style={{ display: 'none' }}
+                />
+              </label>
+              {error && <span style={{ fontSize: 11, color: '#dc2626' }}>{error}</span>}
+            </div>
             <button
               onClick={submitTop}
-              disabled={!newBody.trim() || posting}
+              disabled={(!newBody.trim() && pendingFiles.length === 0) || posting}
               style={{
                 padding: '6px 14px', borderRadius: 7, border: 'none',
                 fontSize: 13, fontWeight: 600,
-                background: newBody.trim() && !posting ? '#4f46e5' : '#c7d2fe',
+                background: (newBody.trim() || pendingFiles.length > 0) && !posting ? '#4f46e5' : '#c7d2fe',
                 color: '#fff',
-                cursor: newBody.trim() && !posting ? 'pointer' : 'not-allowed',
+                cursor: (newBody.trim() || pendingFiles.length > 0) && !posting ? 'pointer' : 'not-allowed',
               }}
             >
               {posting ? '게시 중...' : '게시'}
@@ -423,6 +538,9 @@ export default function ProjectMessageBoard({ projectId }: { projectId: string }
           </div>
         )}
       </div>
+
+      {/* 미디어 풀스크린 뷰어 */}
+      <MediaViewer item={viewerItem} onClose={() => setViewerItem(null)} />
     </div>
   )
 }
