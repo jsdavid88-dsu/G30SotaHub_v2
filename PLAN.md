@@ -1,105 +1,157 @@
-# PLAN — Phase 1 진입 직전 액션 체크리스트
+# PLAN — G30SotaHub v2 진행 상황 + 후속 계획
 
-> **본 문서는 즉시 실행 가능한 Phase 1 작업 목록.**
-> 큰 그림과 설계 근거는 [docs/superpowers/plans/2026-04-30-vfx-integration-knowledge-graph.md](docs/superpowers/plans/2026-04-30-vfx-integration-knowledge-graph.md) 참조.
-
----
-
-## 현재 상태 (2026-05-01)
-
-- ✅ Phase 0 부트스트랩 완료 (이 폴더 생성, 정체성 확립, 첫 통합 커밋)
-- ⏭ Phase 1 DB·인프라 마이그레이션 진입 직전
+> 큰 그림 / 설계 근거: [docs/superpowers/plans/2026-04-30-vfx-integration-knowledge-graph.md](docs/superpowers/plans/2026-04-30-vfx-integration-knowledge-graph.md)
 
 ---
 
-## Phase 1: DB·인프라 마이그레이션 (3-4일)
+## 현재 상태 (2026-05-21)
 
-### 1.1 환경 준비
-
-- [ ] `.env` 작성 — 기존 Hub `.env` 기반 + Ollama URL, NAS 경로, VFX 크롤러용 토큰
-- [ ] Postgres 16 로컬 인스턴스 가동 확인 (또는 docker-compose)
-- [ ] Python venv 새로 생성 + `requirements.txt` 갱신 (vfx 의존성 추가: `crawl4ai`, `praw`, `apscheduler`, `huggingface-hub`, `beautifulsoup4`, `lxml`, `pytz`)
-- [ ] Frontend 의존성 갱신 — `reactflow`, `@tanstack/react-query`, `recharts`, `lucide-react` 추가
-- [ ] `feat/vfx-integration-phase-1` 브랜치 생성
-
-### 1.2 데이터 모델 변경 (마스터 설계서 §5 그대로)
-
-**`backend/app/models/project.py` — self-ref 추가**
-- [ ] `parent_id: UUID | None` (자기참조)
-- [ ] `project_type: str` ("umbrella" | "discipline" | "initiative")
-- [ ] `description: str | None`
-
-**`backend/app/models/sota.py` — `SotaItem` 대대적 확장 (VFX `Item` 흡수)**
-- [ ] Karpathy 온톨로지 필드: `description` (50자), `wiki_body` (markdown), `status`, `version`
-- [ ] 외부 참조: `refs: JSONB` ({github, huggingface, arxiv, papers_with_code, x, project_page, demo})
-- [ ] 라이프사이클: `lifecycle_status`, `replaced_by_id` (self-ref), `deprecated_at`, `deprecated_reason`
-- [ ] 분야 연결: `project_id`
-- [ ] 점수·메타: `keyword_score`, `llm_score`, `llm_reason`, `priority`, `item_metadata` (JSONB), `free_tags` (JSONB), `group_id`
-- [ ] `slug` 자동 생성 hook
-
-**`backend/app/models/graph.py` — 신규 (별도 파일)**
-- [ ] `GraphNode` (UUID, node_type, ref_id, label, meta JSONB)
-- [ ] `GraphEdge` (UUID, source_node_id, target_node_id, edge_type, weight, status, created_by, meta JSONB)
-
-**`backend/app/models/raw_snapshot.py` — 신규 (불변)**
-- [ ] `ModelRawSnapshot` (UUID, sota_item_id, source, captured_at, raw_content, raw_url) — append-only
-
-**`backend/app/models/report.py` — 확장**
-- [ ] `report_type` 에 "sota_weekly" 추가
-- [ ] `status: str` (draft | review | published)
-- [ ] `arca_seed_data: JSONB` (원본 분석 데이터 보존)
-- [ ] `target_period_start/end`, `target_project_id`, `body_markdown`
-- [ ] `reviewed_by`, `published_at`
-
-### 1.3 Alembic 마이그레이션
-
-- [ ] `alembic revision --autogenerate -m "phase-1: vfx integration schema"`
-- [ ] 자동 생성된 SQL 검토 (제약조건, 인덱스 누락 확인)
-- [ ] 인덱스 추가:
-  - `sota_items` — `(lifecycle_status, project_id)`, `(group_id)`, `(refs->>github)` (GIN)
-  - `graph_edges` — `(source_node_id, edge_type)`, `(target_node_id, edge_type)`
-  - `model_raw_snapshots` — `(sota_item_id, captured_at DESC)`
-- [ ] `alembic upgrade head` 적용 후 schema 검증
-- [ ] 다운그레이드 동작 확인 (`alembic downgrade -1` → `upgrade head`)
-
-### 1.4 시드 데이터 (`backend/seed.py` 확장)
-
-- [ ] `motorhead-vfx` umbrella project 1개 생성
-- [ ] 10개 discipline project (vfx-sota-monitor 의 카테고리 그대로):
-  - video_matting, video_removal, face_parsing, point_tracking, head_swap, 3dgs, beauty, korean_text_edit, ref_search, qc_program
-- [ ] 각 discipline 의 description (한/영)
-- [ ] graph_nodes 에 위 11개 등록 (umbrella 1 + discipline 10)
-- [ ] graph_edges 에 `contains` 엣지 10개 (umbrella → discipline)
-
-### 1.5 NAS 마운트
-
-- [ ] 5090 PC 에서 NAS 네트워크 드라이브 영구 매핑 (Windows 자격증명 관리자)
-- [ ] `M:\sota_files\models\`, `M:\sota_files\reports\`, `M:\sota_files\raw_snapshots\` 폴더 생성
-- [ ] 백엔드 서비스 계정에서 read/write 권한 검증
-- [ ] Phase 2 의 영상 프록시 라우터를 위한 base path 환경변수 (`NAS_BASE_PATH`) 정의
-
-### 1.6 검증
-
-- [ ] `python -c "from app.models import *"` 임포트 에러 없음
-- [ ] `alembic current` → 새 revision id
-- [ ] Postgres 에서 `\d sota_items`, `\d graph_nodes`, `\d graph_edges`, `\d model_raw_snapshots` 으로 컬럼 확인
-- [ ] `python seed.py` 후 `SELECT name, project_type FROM projects;` → 11개 행 확인
-- [ ] 기존 Hub API (auth, users, daily, weekly) 동작 검증 — 회귀 없음
-
-### 1.7 커밋 & 다음 단계
-
-- [ ] `git commit` — "feat(phase-1): vfx integration schema + motorhead-vfx seed"
-- [ ] Phase 2 진입용 plan 문서 작성 (`docs/superpowers/plans/2026-05-XX-phase-2-vfx-backend.md`)
+- ✅ **Phase 0** — 부트스트랩 (폴더 생성, 정체성)
+- ✅ **Phase 1** — DB·인프라 마이그레이션 (`g0a1b2c3d4e5_unify_sota_and_vfx_items` + 후속)
+- ✅ **Phase 1.5** — VFX UI 강화 + 통합 흐름
+  - 카드 ↔ 표 뷰 토글, Triage 워크플로우, ItemDetail 현황·액션, RunStatusBar
+  - DailyWrite SOTA 통합 (inline 메모 → today 자동 기록)
+  - Hub Dashboard "진행 중인 연구" (ActiveResearchSection)
+- ✅ **Phase 2 (1단계)** — 협업 통합 메시지
+  - Phase 1A: @mention 알림 (services/mentions.py)
+  - Phase 1B: 프로젝트 활동 피드 (ProjectActivityFeed)
+  - Phase 2: 프로젝트 메시지 보드 (ProjectMessageBoard — threaded 토론)
+- ✅ 검증 — Playwright 3 역할 × 23 페이지 + 6 fix
+- ⏭ **다음**: Phase 2.5 (미디어 + annotation), Phase 3 (그래프 UI), 외 ...
 
 ---
 
-## Phase 2-6 요약 (Phase 1 끝나면 각각 별도 plan 작성)
+## Phase 2.5 — 미디어 + Annotation (이미지 + 영상 + 그 위에 그리기)
 
-- **Phase 2**: VFX 백엔드 흡수 — `/api/v1/sota/*`, `/api/v1/graph/*`, `/api/v1/uploads/video`, APScheduler 통합, Arca 코드 이식
-- **Phase 3**: 그래프 UI — KnowledgeGraph 페이지, ModelDetail, 영상 업로드/재생, 댓글 스레드
-- **Phase 4**: 모터헤드 협업 UX — `external` 가입 화이트리스트, 가시성 정책 적용, 모델 배정 워크플로
-- **Phase 5**: Arca 주간 리포트 — 일요일 22:00 스케줄러, draft → review → published, 푸시 알림
-- **Phase 6**: 정리 — vfx-sota-monitor 폐기, Cloudflare Tunnel 일원화, 백업 자동화
+> **VFX 본질의 진짜 통합 기능.** Frame.io / SyncSketch 같은 패턴.
+
+### 핵심 결정 — 저장 전략
+
+**원칙**: Attachment 모델은 **상대 경로만** 저장 + base path 는 env 변수.
+
+```python
+class Attachment(...):
+    storage_relpath: str  # "2026/05/abc.mp4" (절대 경로 아님)
+    # full_path = settings.STORAGE_BASE_PATH + storage_relpath
+```
+
+env:
+```
+# 지금 (NAS 없음)
+STORAGE_BASE_PATH=./backend/uploads/
+
+# 나중에 NAS 마운트 후
+STORAGE_BASE_PATH=M:\sota_files\
+```
+
+**NAS 이전 시**: 파일 복사 (`robocopy`) + env 변경 → 끝. DB 변경 X.
+
+### A. 첨부 + 뷰어 (1-2일)
+
+**Backend:**
+- [ ] `Attachment` 모델 확장 — `storage_relpath`, `media_type` (image/video/other), `mime`, `size_bytes`, `width`, `height`, `duration_sec`, `thumbnail_relpath`
+- [ ] `AttachmentOwnerType` 에 `project_message` 추가
+- [ ] `POST /api/v1/attachments` — multipart upload (이미지/영상)
+- [ ] `GET /api/v1/attachments/{id}/stream` — backend 프록시 (range request 지원, 영상 streaming)
+- [ ] `GET /api/v1/attachments/{id}/thumbnail` — 이미지 썸네일 / 영상 첫 프레임 (ffmpeg)
+- [ ] 영상 업로드 시 ffmpeg 으로 썸네일 생성 (5090 PC 에 `ffmpeg` 설치 필요)
+
+**Frontend:**
+- [ ] `AttachmentUploader` 컴포넌트 — drag&drop + 미리보기
+- [ ] `MediaViewer` (Lightbox) — 이미지/영상 풀스크린
+- [ ] `ProjectMessageBoard` 에 첨부 인라인 표시 + 클릭 시 Lightbox
+
+### B. 이미지 annotation (+ 2-3일)
+
+**Backend:**
+- [ ] `Annotation` 모델 신규 — `id`, `attachment_id`, `author_id`, `shape_type` (pin/box/freedraw), `geometry: JSONB` (좌표), `created_at`
+- [ ] `AnnotationComment` 모델 — `annotation_id`, `author_id`, `body`, threaded (parent_id 옵션)
+- [ ] `/api/v1/attachments/{id}/annotations` CRUD
+- [ ] @mention 통합 (services/mentions.py)
+
+**Frontend:**
+- [ ] `ImageAnnotator` 컴포넌트 — SVG overlay 위에 그리기 (pin/box/freedraw)
+- [ ] 각 annotation 옆 thread 표시 + 코멘트 작성
+- [ ] Lightbox 안에서 그리기 모드 토글
+
+### C. 영상 annotation (+ 3-5일)
+
+**Backend:**
+- [ ] `Annotation.timecode_ms` 칼럼 추가 (영상용 — 특정 시점 마크)
+- [ ] `/api/v1/attachments/{id}/frame?t=<ms>` — ffmpeg 으로 특정 프레임 추출 (캐시)
+
+**Frontend:**
+- [ ] `VideoAnnotator` 컴포넌트 — `<video>` + canvas overlay
+- [ ] 영상 일시정지 → 그리기 모드 → annotation 저장
+- [ ] 타임라인에 annotation 마커 표시 + 클릭 시 점프
+- [ ] 마커별 thread comment
+
+### 전제 — 환경
+
+- [ ] **NAS 마운트 결정** — 지금은 `backend/uploads/` 로 시작 OK. 영상 GB 단위 들어가기 시작하면 NAS 로 이전 (env 변경 + robocopy 만).
+- [ ] **ffmpeg 5090 PC 설치** — 영상 썸네일 + 프레임 추출에 필수. `winget install ffmpeg` 또는 [ffmpeg.org](https://www.ffmpeg.org/download.html) 에서 다운.
+- [ ] backend uploads 폴더 `.gitignore` 처리 (이미 되어 있을 것)
+
+### 진행 권장 순서
+
+1. **A 먼저** — 첨부 + 뷰어 (1-2일). ffmpeg 만 있으면 NAS 안 기다림.
+2. **B** — 이미지 annotation (2-3일). 영상 안 기다림.
+3. **(영상 첨부 많아지면)** NAS 마운트 → env 변경 → 파일 이전
+4. **C** — 영상 annotation (3-5일)
+5. **D (선택)** — 실시간 협업 annotation (WebSocket, 1주+). 보류 권장.
+
+---
+
+## Phase 3 — 그래프 UI (마스터 설계서 §7)
+
+- [ ] `KnowledgeGraph` 페이지 — reactflow 본격. 카테고리·계보·담당자·라이프사이클 모두 그래프.
+- [ ] 노드 카드 강화 — GitHub stars / HF likes / arxiv / PWC / 담당자 / 리뷰 통합 표시
+- [ ] 자유 엣지 (사용자가 그래프 위에서 노드 ↔ 노드 직접 연결)
+- [ ] AI 추정 엣지 (Arca 가 자동 제안 → 사람 confirm)
+
+---
+
+## Phase 4 — 모터헤드 협업 (외부 가시성)
+
+- [ ] `external` 가입 화이트리스트 (이메일 도메인 허용 목록)
+- [ ] 프로젝트 가시성 정책 옵션 B (같은 프로젝트 멤버 = full visibility)
+- [ ] 외부 멤버 초대 UI (교수가 이메일 입력 → 초대 링크)
+- [ ] 모터헤드 모델 배정 UX 강화 (Triage `[모터헤드]` 이미 있음)
+
+---
+
+## Phase 5 — Arca 주간 리포트
+
+- [ ] 일요일 22:00 KST 스케줄러 (APScheduler 이미 있음)
+- [ ] `weekly_reporter.py` — Arca 가 일주일 활동 (신규 모델 / 리뷰 / 마일스톤) 종합 → draft 생성
+- [ ] `Report.status` 흐름: draft → review → published
+- [ ] 본인 + admin 검토 후 published 시 push 알림
+
+---
+
+## Phase 6 — 정리
+
+- [ ] vfx-sota-monitor 원본 폴더 archive (참조용 read-only)
+- [ ] Cloudflare Tunnel 영구 도메인 정착 (Tailscale funnel 보조)
+- [ ] PG 자동 백업 (cron + pg_dump → NAS)
+- [ ] 운영 모니터링 (Sentry 또는 self-hosted)
+
+---
+
+## 후순위 / 보류
+
+- **#11 Arca → Hermes/LDR 마이그레이션** — 3개월 후 재평가. 지금은 Arca + Gemma4 26B 안정화 우선.
+- **D 실시간 협업 annotation** — 1주+. 단일 PC 환경에 과스펙. WebSocket 도입 신중.
+- **외부 채팅 URL 필드 (Slack/카톡)** — 30분 작업. 진짜 채팅 필요해질 때.
+
+---
+
+## GitHub 이슈 (active)
+
+- **#6** Gemma 파싱 실패 — fix push 됨, 5090 검증 대기
+- **#7** 크롤러 huggingface 만 — 진단 로그 push 됨, isolated 테스트 대기
+- **#9** Phase 1 migration 안내 — 검증 후 close 가능
+- **#11** Hermes/LDR 리서치 — 3개월 후 재평가 메모 후 close
 
 ---
 
@@ -107,5 +159,14 @@
 
 | 날짜 | 작업 | 비고 |
 |------|------|------|
-| 2026-04-30 | 마스터 설계서 작성 + 두 사이드 정체성 메모 | 통합 결정 합의 |
-| 2026-05-01 | Phase 0 부트스트랩 | G30SotaHub_v2 폴더 생성, 첫 커밋 |
+| 2026-04-30 | 마스터 설계서 작성 | 통합 결정 합의 |
+| 2026-05-01 | Phase 0 부트스트랩 | G30SotaHub_v2 폴더 |
+| 2026-05-07 | Phase 1 통합 마이그레이션 | `g0a1b2c3d4e5_unify_sota_and_vfx_items` |
+| 2026-05-07 | VFX UI 강화 (1차) | 카드/표 토글, Triage, ItemDetail |
+| 2026-05-07 | RunStatusBar + DailyWrite SOTA | 두 시스템 유기적 연결 |
+| 2026-05-08 | 이슈 #6/#7 fix + 진단 로그 | max_tokens 1800, SCORE_BATCH 3 |
+| 2026-05-19 | SQLite 잔재 정리 (PG 호환) | json_each → jsonb_array_elements_text |
+| 2026-05-20 | start.ps1 PS5.1 호환, 포트 8011/3030 | 환경 안정화 |
+| 2026-05-20 | Phase 1A @mention + Phase 1B 활동 피드 | 협업 1단계 |
+| 2026-05-21 | Phase 2 메시지 보드 | 통합 토론 공간 |
+| 2026-05-21 | 검증 매트릭스 + 6 fix | 3 역할 × 23 페이지 |
