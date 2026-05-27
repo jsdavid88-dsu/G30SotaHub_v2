@@ -17,6 +17,7 @@ from app.models.sota import SotaAssignment, SotaReview, SotaAssignmentStatus
 from app.models.report import ReportSnapshot, ReportType, ReportScopeType
 from app.models.announcement import Announcement, AnnouncementRead, AnnouncementAudience
 from app.models.push_subscription import PushSubscription
+from app.models.project_message import ProjectMessage
 
 # === VFX SOTA Monitor (Phase 1: 통합 모델) ===
 from app.models.vfx_category import Category
@@ -61,6 +62,8 @@ __all__ = [
     "Announcement", "AnnouncementRead", "AnnouncementAudience",
     # PushSubscription
     "PushSubscription",
+    # ProjectMessage (Phase 2 — 프로젝트 메시지 보드)
+    "ProjectMessage",
     # === SOTA Item (통합 — Hub SotaItem 흡수, VFX 자동 수집 + 수동 등록 모두) ===
     "Category",
     "Item",          # 통합 모델 (table: items)

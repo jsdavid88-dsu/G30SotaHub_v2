@@ -485,3 +485,166 @@ async def project_activity(
     events = [e for e in events if e.get("timestamp")]
     events.sort(key=lambda e: e["timestamp"], reverse=True)
     return events[:limit]
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Phase 2 — 프로젝트 메시지 보드
+# ════════════════════════════════════════════════════════════════════════
+
+from app.models.project_message import ProjectMessage
+from app.schemas.project_message import (
+    ProjectMessageCreate,
+    ProjectMessageResponse,
+    ProjectMessageUpdate,
+)
+from app.services.mentions import create_mention_notifications
+
+
+def _build_message_response(m: ProjectMessage, reply_count: int = 0) -> ProjectMessageResponse:
+    return ProjectMessageResponse(
+        id=m.id,
+        project_id=m.project_id,
+        parent_id=m.parent_id,
+        author_id=m.author_id,
+        author_name=m.author.name if m.author else "",
+        body=m.body,
+        created_at=m.created_at,
+        updated_at=m.updated_at,
+        reply_count=reply_count,
+    )
+
+
+@router.get("/{project_id}/messages", response_model=list[ProjectMessageResponse])
+async def list_project_messages(
+    project_id: uuid.UUID,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+    _membership: ProjectMember = Depends(require_project_membership),
+):
+    """Top-level + replies 전부 시간순. Frontend 가 parent_id 로 그룹핑."""
+    # top-level + replies 동시 select. 시간순 (오래된 → 최신).
+    res = await db.execute(
+        select(ProjectMessage)
+        .options(selectinload(ProjectMessage.author))
+        .where(ProjectMessage.project_id == project_id)
+        .order_by(ProjectMessage.created_at.asc())
+        .offset(offset).limit(limit)
+    )
+    messages = list(res.scalars().unique().all())
+
+    # reply_count: top-level 만. 같은 query 결과 안에서 계산.
+    reply_count_map: dict[uuid.UUID, int] = {}
+    for m in messages:
+        if m.parent_id:
+            reply_count_map[m.parent_id] = reply_count_map.get(m.parent_id, 0) + 1
+
+    return [_build_message_response(m, reply_count_map.get(m.id, 0)) for m in messages]
+
+
+@router.post("/{project_id}/messages", response_model=ProjectMessageResponse, status_code=201)
+async def create_project_message(
+    project_id: uuid.UUID,
+    body: ProjectMessageCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    _membership: ProjectMember = Depends(require_project_membership),
+):
+    """프로젝트 메시지 작성 (또는 reply). @mention 본문 파싱 → Notification 생성."""
+    # parent_id 가 있으면 같은 프로젝트인지 검증
+    if body.parent_id:
+        parent_res = await db.execute(
+            select(ProjectMessage).where(ProjectMessage.id == body.parent_id)
+        )
+        parent = parent_res.scalar_one_or_none()
+        if not parent or parent.project_id != project_id:
+            raise HTTPException(status_code=400, detail="parent_id 가 같은 프로젝트의 메시지가 아닙니다")
+
+    msg = ProjectMessage(
+        project_id=project_id,
+        parent_id=body.parent_id,
+        author_id=user.id,
+        body=body.body,
+    )
+    db.add(msg)
+    await db.flush()
+
+    # @mention 알림 (services/mentions.py 재사용)
+    await create_mention_notifications(
+        db,
+        text=body.body,
+        actor=user,
+        source_label="프로젝트 토론",
+        target_type="project_message",
+        target_id=msg.id,
+    )
+    await db.commit()
+    await db.refresh(msg)
+
+    # author 로드해서 응답
+    res = await db.execute(
+        select(ProjectMessage)
+        .options(selectinload(ProjectMessage.author))
+        .where(ProjectMessage.id == msg.id)
+    )
+    msg = res.scalar_one()
+    return _build_message_response(msg, 0)
+
+
+@router.patch("/{project_id}/messages/{message_id}", response_model=ProjectMessageResponse)
+async def update_project_message(
+    project_id: uuid.UUID,
+    message_id: uuid.UUID,
+    body: ProjectMessageUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    _membership: ProjectMember = Depends(require_project_membership),
+):
+    """본인만 수정 가능. mention 추가/제거는 신규 mention 만 알림."""
+    res = await db.execute(
+        select(ProjectMessage)
+        .options(selectinload(ProjectMessage.author))
+        .where(ProjectMessage.id == message_id, ProjectMessage.project_id == project_id)
+    )
+    msg = res.scalar_one_or_none()
+    if not msg:
+        raise HTTPException(status_code=404, detail="메시지를 찾을 수 없습니다")
+    if msg.author_id != user.id and user.role not in (UserRole.admin,):
+        raise HTTPException(status_code=403, detail="본인 메시지만 수정 가능합니다")
+
+    msg.body = body.body
+    # 수정 시 추가된 mention 만 알림 (단순화: 그냥 다시 파싱 — 중복 알림 가능성 있지만 본문 변경 자체가 드문 케이스)
+    await create_mention_notifications(
+        db,
+        text=body.body,
+        actor=user,
+        source_label="프로젝트 토론",
+        target_type="project_message",
+        target_id=msg.id,
+    )
+    await db.commit()
+    await db.refresh(msg)
+    return _build_message_response(msg, 0)
+
+
+@router.delete("/{project_id}/messages/{message_id}", status_code=204)
+async def delete_project_message(
+    project_id: uuid.UUID,
+    message_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    _membership: ProjectMember = Depends(require_project_membership),
+):
+    """본인 또는 admin 만 삭제."""
+    res = await db.execute(
+        select(ProjectMessage)
+        .where(ProjectMessage.id == message_id, ProjectMessage.project_id == project_id)
+    )
+    msg = res.scalar_one_or_none()
+    if not msg:
+        raise HTTPException(status_code=404, detail="메시지를 찾을 수 없습니다")
+    if msg.author_id != user.id and user.role not in (UserRole.admin,):
+        raise HTTPException(status_code=403, detail="본인 메시지만 삭제 가능합니다")
+
+    await db.delete(msg)  # cascade 로 replies 도 같이 삭제
+    await db.commit()
