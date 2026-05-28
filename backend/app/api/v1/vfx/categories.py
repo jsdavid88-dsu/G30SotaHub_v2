@@ -59,7 +59,10 @@ def _to_read(cat: Category, total: int, new_count: int) -> CategoryRead:
 
 
 @router.get("", response_model=list[CategoryRead])
-async def list_categories(db: AsyncSession = Depends(get_db)):
+async def list_categories(
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
     result = await db.execute(select(Category).order_by(Category.display_order))
     categories = result.scalars().all()
 
@@ -71,7 +74,11 @@ async def list_categories(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{slug}", response_model=CategoryRead)
-async def get_category(slug: str, db: AsyncSession = Depends(get_db)):
+async def get_category(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
     result = await db.execute(select(Category).where(Category.slug == slug))
     cat = result.scalar_one_or_none()
     if not cat:

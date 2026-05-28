@@ -1,43 +1,32 @@
-import type { Item } from "../types";
-
-const styles: Record<Item["source"], string> = {
-  arxiv: "bg-red-500/10 text-red-400 border-red-500/30",
-  github: "bg-neutral-500/10 text-neutral-300 border-neutral-500/30",
-  huggingface: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30",
-  reddit: "bg-orange-500/10 text-orange-400 border-orange-500/30",
-  x: "bg-sky-500/10 text-sky-400 border-sky-500/30",
-};
-
-const mutedStyles: Record<Item["source"], string> = {
-  arxiv: "bg-red-500/5 text-red-400/60 border-red-500/20 border-dashed",
-  github: "bg-neutral-500/5 text-neutral-300/60 border-neutral-500/20 border-dashed",
-  huggingface: "bg-yellow-500/5 text-yellow-400/60 border-yellow-500/20 border-dashed",
-  reddit: "bg-orange-500/5 text-orange-400/60 border-orange-500/20 border-dashed",
-  x: "bg-sky-500/5 text-sky-400/60 border-sky-500/20 border-dashed",
-};
-
-const labels: Record<Item["source"], string> = {
-  arxiv: "arXiv",
-  github: "GitHub",
-  huggingface: "HF",
-  reddit: "Reddit",
-  x: "X",
-};
+// 이슈 #15 P2-6: design.ts 의 SOURCE_COLORS 를 source-of-truth 로 사용 +
+// 미등록 source fallback. dark Tailwind 클래스 → Hub light 테마 inline style.
+import { sourceBadge } from "../design";
 
 export default function SourceBadge({
   source,
   muted,
 }: {
-  source: Item["source"];
+  source: string;
   muted?: boolean;
 }) {
+  const { bg, color, label } = sourceBadge(source);
   return (
     <span
-      className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${
-        muted ? mutedStyles[source] : styles[source]
-      }`}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        borderRadius: 6,
+        padding: "1px 6px",
+        fontSize: 10,
+        fontWeight: 600,
+        background: bg,
+        color,
+        border: muted ? `1px dashed ${color}55` : `1px solid ${color}33`,
+        opacity: muted ? 0.6 : 1,
+        whiteSpace: "nowrap",
+      }}
     >
-      {labels[source]}
+      {label}
     </span>
   );
 }

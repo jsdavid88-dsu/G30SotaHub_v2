@@ -62,14 +62,16 @@ export default function LineageFlow({ graph, height = 600 }: Props) {
         ),
       },
       style: {
-        background: node.id === graph.center_id ? "#7c3aed" : "#1f2937",
-        color: "#f5f5f5",
+        // 이슈 #15 P3-7: Hub light 테마. center 는 accent 보라, 나머지는 흰 카드 + 어두운 글자.
+        background: node.id === graph.center_id ? "#7c3aed" : "#ffffff",
+        color: node.id === graph.center_id ? "#ffffff" : "#1e293b",
         border: `1.5px solid ${
-          node.priority ? PRIORITY_COLORS[node.priority] ?? "#404040" : "#404040"
+          node.priority ? PRIORITY_COLORS[node.priority] ?? "#cbd5e1" : "#cbd5e1"
         }`,
         borderRadius: 8,
         padding: 8,
         width: 200,
+        boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
       },
     }));
 
@@ -92,8 +94,13 @@ export default function LineageFlow({ graph, height = 600 }: Props) {
   if (!graph || graph.nodes.length === 0) {
     return (
       <div
-        className="rounded-xl border border-dashed border-neutral-800 bg-neutral-900/50 flex items-center justify-center text-sm text-neutral-500"
-        style={{ height }}
+        className="rounded-xl border border-dashed flex items-center justify-center text-sm"
+        style={{
+          height,
+          borderColor: "var(--color-border)",
+          background: "var(--color-card)",
+          color: "var(--color-text-muted)",
+        }}
       >
         계보 데이터가 없습니다 (Semantic Scholar 수집 대기)
       </div>
@@ -102,11 +109,15 @@ export default function LineageFlow({ graph, height = 600 }: Props) {
 
   return (
     <div
-      className="rounded-xl border border-neutral-800 bg-neutral-950 overflow-hidden"
-      style={{ height }}
+      className="rounded-xl overflow-hidden"
+      style={{
+        height,
+        border: "1px solid var(--color-border)",
+        background: "var(--color-card)",
+      }}
     >
       <ReactFlow nodes={nodes} edges={edges} fitView minZoom={0.2} maxZoom={2}>
-        <Background color="#262626" gap={16} />
+        <Background color="#e2e8f0" gap={16} />
         <Controls />
       </ReactFlow>
     </div>

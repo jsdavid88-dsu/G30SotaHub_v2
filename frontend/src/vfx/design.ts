@@ -129,12 +129,25 @@ export const SOURCE_COLORS: Record<string, { bg: string; color: string; label: s
   arxiv:        { bg: "#fee2e2", color: "#b91c1c", label: "arXiv" },
   github:       { bg: "#1f2937", color: "#fff",    label: "GitHub" },
   huggingface:  { bg: "#fef3c7", color: "#92400e", label: "HF" },
+  hf_space:     { bg: "#fef3c7", color: "#92400e", label: "HF Space" },
+  hf_paper:     { bg: "#fef3c7", color: "#92400e", label: "HF Paper" },
   reddit:       { bg: "#ffedd5", color: "#c2410c", label: "Reddit" },
   x:            { bg: "#0f172a", color: "#fff",    label: "X" },
   youtube:      { bg: "#fee2e2", color: "#b91c1c", label: "YouTube" },
   paperswithcode: { bg: "#dcfce7", color: "#166534", label: "PwC" },
   crawl4ai:     { bg: "#e0e7ff", color: "#4338ca", label: "Web" },
+  manual:       { bg: "#ede9fe", color: "#6d28d9", label: "수동" },
 };
+
+// 알 수 없는 source 용 fallback badge (이슈 #15 P2-6 — undefined 스타일 방지).
+export const SOURCE_FALLBACK = { bg: "#f1f5f9", color: "#475569" };
+
+export function sourceBadge(source: string): { bg: string; color: string; label: string } {
+  const known = SOURCE_COLORS[source];
+  if (known) return known;
+  // 미등록 source 는 fallback 색 + source 문자열을 label 로 노출 (디버깅에도 유용)
+  return { ...SOURCE_FALLBACK, label: source };
+}
 
 export const hoverRow = {
   onMouseEnter: (e: React.MouseEvent<HTMLDivElement>) => {

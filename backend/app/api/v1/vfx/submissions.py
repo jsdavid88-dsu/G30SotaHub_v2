@@ -4,7 +4,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.dependencies import get_current_user
 from app.models import Submission
+from app.models.user import User
 from app.schemas.vfx.submission import SubmissionCreate, SubmissionRead
 
 router = APIRouter(prefix="/submissions", tags=["submissions"])
@@ -17,10 +19,13 @@ MAX_PENDING_PER_USER = 20
 async def create_submission(
     body: SubmissionCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """Submit a URL or keyword for Arca to investigate."""
+    """Submit a URL or keyword for Arca to investigate. 로그인 사용자만 (Hub 통합)."""
+    # submitted_by 미지정 시 현재 로그인 사용자로 기록
+    if not body.submitted_by:
+        body.submitted_by = current_user.name or str(current_user.email)
     # Rate limit check
-    user_key = body.submitted_by or "__anonymous__"
     pending_count = (
         await db.execute(
             select(func.count(Submission.id)).where(
@@ -54,6 +59,7 @@ async def list_submissions(
     limit: int = Query(50, le=200),
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     """List submissions, optionally filtered by status."""
     stmt = select(Submission).order_by(Submission.created_at.desc())
@@ -65,7 +71,10 @@ async def list_submissions(
 
 
 @router.get("/stats")
-async def submission_stats(db: AsyncSession = Depends(get_db)):
+async def submission_stats(
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
     """Quick stats on submission queue."""
     counts = {}
     for s in ("pending", "processing", "done", "rejected"):

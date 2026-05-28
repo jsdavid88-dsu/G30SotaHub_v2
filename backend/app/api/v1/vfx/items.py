@@ -81,6 +81,7 @@ async def list_items(
     limit: int = Query(50, le=500),
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     stmt = select(Item).options(*_eager_options())
     if source:
@@ -109,13 +110,21 @@ async def list_items(
 
 
 @router.get("/{item_id}", response_model=ItemRead)
-async def get_item(item_id: int, db: AsyncSession = Depends(get_db)):
+async def get_item(
+    item_id: int,
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
     item = await _load_item(db, item_id)
     return serialize_item(item)
 
 
 @router.get("/{item_id}/siblings", response_model=list[ItemRead])
-async def get_group_siblings(item_id: int, db: AsyncSession = Depends(get_db)):
+async def get_group_siblings(
+    item_id: int,
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
     """Return all items sharing the same group_id (excluding self)."""
     anchor = await db.get(Item, item_id)
     if not anchor or not anchor.group_id:
