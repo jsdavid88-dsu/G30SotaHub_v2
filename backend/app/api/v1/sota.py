@@ -322,12 +322,35 @@ async def update_sota_item(
 @router.delete("/{item_id}", status_code=204)
 async def delete_sota_item(
     item_id: int,
+    hard: bool = Query(False, description="manual 외의 source 도 hard delete (admin 명시적 옵션, 위험)"),
     db: AsyncSession = Depends(get_db),
     _current_user: User = Depends(require_role(UserRole.professor, UserRole.admin)),
 ):
-    """Delete a SOTA item. Professor or admin only."""
+    """Delete or archive a SOTA item. Professor or admin only.
+
+    이슈 #15 P1-4: 자동 수집된 (source != 'manual') 모델은 hard delete 시
+    assignments/comments/categories 가 cascade 로 통째 날아가므로 위험.
+
+    동작:
+    - source == 'manual': hard delete (사용자 수동 등록 — 원복 가능, 안전)
+    - source != 'manual': soft archive (status='archived', lifecycle_status='deprecated',
+      deprecated_at=now, deprecated_reason='Soft-deleted by admin')
+    - ?hard=true 쿼리스트링 명시 시 모든 source hard delete (admin 의식적 선택)
+    """
     item = await _get_item_or_404(db, item_id)
-    await db.delete(item)
+
+    if hard or item.source == "manual":
+        # manual 또는 hard=true 명시 → 실제 삭제 (cascade 적용)
+        await db.delete(item)
+        await db.commit()
+        return
+
+    # soft archive — 자동 수집된 모델은 기록 보존
+    item.status = "archived"
+    item.lifecycle_status = LifecycleStatus.deprecated
+    item.deprecated_at = datetime.now(timezone.utc)
+    if not item.deprecated_reason:
+        item.deprecated_reason = "Soft-deleted by admin"
     await db.commit()
 
 

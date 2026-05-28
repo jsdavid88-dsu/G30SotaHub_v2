@@ -52,7 +52,8 @@ export type Item = {
   // Phase 1 통합: 'manual' (Hub 수동 등록) 추가
   source: "arxiv" | "github" | "huggingface" | "reddit" | "x" | "manual" | string;
   external_id: string;
-  url: string;
+  // manual item 은 URL 없을 수 있음 (이슈 #15 P1-3)
+  url: string | null;
   title: string;
   abstract: string | null;
   authors: string | null;

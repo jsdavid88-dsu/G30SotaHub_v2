@@ -12,7 +12,9 @@ from pydantic import BaseModel, ConfigDict, Field
 class ItemBase(BaseModel):
     source: str
     external_id: str
-    url: str
+    # url: manual (Hub 수동 등록) item 은 URL 없을 수 있음 — Item.url 모델도 nullable.
+    # 이슈 #15 P1-3: ItemRead validation 실패 방지.
+    url: str | None = None
     title: str
     abstract: str | None = None
     authors: str | None = None

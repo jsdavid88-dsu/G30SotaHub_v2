@@ -71,13 +71,13 @@ function SiblingRow({ item, current = false }: { item: Item; current?: boolean }
       </div>
       {current ? (
         <span style={{ fontSize: 11, color: "var(--color-accent-dark)", fontWeight: 600, whiteSpace: "nowrap" }}>현재 보는 중</span>
-      ) : (
+      ) : item.url ? (
         <a href={item.url} target="_blank" rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
           style={{ color: "var(--color-text-muted)", display: "inline-flex" }}>
           <ExternalLink style={{ width: 14, height: 14 }} />
         </a>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -213,9 +213,13 @@ export default function ItemDetail() {
             {item.published_at && <><strong style={{ color: "var(--color-text-secondary)" }}>발표</strong> {new Date(item.published_at).toLocaleDateString("ko-KR")} · </>}
             <span style={{ opacity: 0.7 }}>발견 {new Date(item.discovered_at).toLocaleString("ko-KR")}</span>
           </div>
-          <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ ...btnPrimary, textDecoration: "none" }}>
-            원문 보기 <ExternalLink style={{ width: 12, height: 12 }} />
-          </a>
+          {item.url ? (
+            <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ ...btnPrimary, textDecoration: "none" }}>
+              원문 보기 <ExternalLink style={{ width: 12, height: 12 }} />
+            </a>
+          ) : (
+            <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>URL 없음 (수동 등록)</span>
+          )}
         </div>
       </article>
 

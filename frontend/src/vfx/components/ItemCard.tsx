@@ -71,17 +71,19 @@ export default function ItemCard({
             </span>
           )}
         </div>
-        {/* Nested <a> 회피 — wrapping <Link> 안이라 <span> + onClick window.open */}
-        <span
-          role="link"
-          tabIndex={0}
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.open(item.url, "_blank", "noopener,noreferrer"); }}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); window.open(item.url, "_blank", "noopener,noreferrer"); } }}
-          title="원문 열기"
-          style={{ color: "var(--color-text-muted)", display: "inline-flex", cursor: "pointer" }}
-        >
-          <ExternalLink style={{ width: 14, height: 14 }} />
-        </span>
+        {/* Nested <a> 회피 — wrapping <Link> 안이라 <span> + onClick window.open. url 없으면 (manual item) 숨김 */}
+        {item.url && (
+          <span
+            role="link"
+            tabIndex={0}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.open(item.url!, "_blank", "noopener,noreferrer"); }}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); window.open(item.url!, "_blank", "noopener,noreferrer"); } }}
+            title="원문 열기"
+            style={{ color: "var(--color-text-muted)", display: "inline-flex", cursor: "pointer" }}
+          >
+            <ExternalLink style={{ width: 14, height: 14 }} />
+          </span>
+        )}
       </div>
 
       <h3 style={{

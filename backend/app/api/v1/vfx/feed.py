@@ -1,22 +1,23 @@
-"""Feed endpoints — browse, save, promote."""
+"""Feed endpoints — browse, save, promote.
+
+권한 (이슈 #15 P1-2):
+- list/get : 누구나 (지금은 인증 없음 — Codex P2-5 에서 별도 다룸)
+- save / delete / crawl : admin/professor 또는 X-Admin-Token (worker)
+  → vfx/admin.py 의 verify_admin_token 재사용
+"""
 from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.database import get_db
 from app.models import FeedItem
 from app.schemas.vfx.feed import FeedCrawlResult, FeedItemRead, FeedSaveToggle
 from app.jobs.feed_crawler import crawl_feed_all, crawl_feed_source
+from app.api.v1.vfx.admin import verify_admin_token
 
 router = APIRouter(prefix="/feed", tags=["feed"])
-
-
-def _verify_admin(token: str | None) -> None:
-    if token != settings.admin_token:
-        raise HTTPException(status_code=401, detail="Invalid admin token")
 
 
 @router.get("", response_model=list[FeedItemRead])
@@ -58,7 +59,9 @@ async def toggle_save(
     feed_id: int,
     payload: FeedSaveToggle,
     db: AsyncSession = Depends(get_db),
+    _auth: None = Depends(verify_admin_token),
 ):
+    """is_saved 는 전역 큐레이션 플래그 — admin/professor 또는 worker 만."""
     item = await db.get(FeedItem, feed_id)
     if not item:
         raise HTTPException(status_code=404, detail="Feed item not found")
@@ -70,7 +73,11 @@ async def toggle_save(
 
 
 @router.delete("/{feed_id}", status_code=204)
-async def delete_feed_item(feed_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_feed_item(
+    feed_id: int,
+    db: AsyncSession = Depends(get_db),
+    _auth: None = Depends(verify_admin_token),
+):
     item = await db.get(FeedItem, feed_id)
     if not item:
         raise HTTPException(status_code=404, detail="Feed item not found")
@@ -82,12 +89,8 @@ async def delete_feed_item(feed_id: int, db: AsyncSession = Depends(get_db)):
 async def trigger_feed_crawl(
     background: BackgroundTasks,
     wait: bool = Query(False),
-    x_admin_token: str | None = None,
+    _auth: None = Depends(verify_admin_token),
 ):
-    from fastapi import Header
-    # Note: FastAPI doesn't parse Header from function body param;
-    # this endpoint is protected by checking header in middleware pattern.
-    # For simplicity, use query param or header via Depends in Phase C.
     if wait:
         results = await crawl_feed_all()
         return [FeedCrawlResult(**r) for r in results]
@@ -100,6 +103,7 @@ async def trigger_feed_source(
     source: str,
     background: BackgroundTasks,
     wait: bool = Query(False),
+    _auth: None = Depends(verify_admin_token),
 ):
     valid = ("youtube", "x", "hf_trending", "paperswithcode", "crawl4ai", "reddit")
     if source not in valid:
