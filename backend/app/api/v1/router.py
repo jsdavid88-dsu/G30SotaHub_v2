@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1 import auth, users, projects, tasks, tags, comments, daily, events, weekly_notes, uploads, attachments, attendance, notifications, admin, sota, reports, gcal, announcements, push, feed
+from app.api.v1 import auth, users, projects, tasks, tags, comments, daily, events, weekly_notes, uploads, attachments, attendance, notifications, admin, sota, reports, gcal, announcements, push, feed, annotations
 
 # === VFX SOTA Monitor 라우터 (vfx-sota-monitor 흡수) ===
 from app.api.v1.vfx import (
@@ -31,6 +31,7 @@ api_router.include_router(events.router, prefix="/events", tags=["events"])
 api_router.include_router(weekly_notes.router, prefix="/weekly-notes", tags=["weekly-notes"])
 api_router.include_router(uploads.router, prefix="/uploads", tags=["uploads"])
 api_router.include_router(attachments.router, prefix="/attachments", tags=["attachments"])  # Phase 2.5 — 미디어
+api_router.include_router(annotations.router)  # Phase 2.5 B — 주석 (절대경로: /attachments/{id}/annotations, /annotations/{id})
 api_router.include_router(attendance.router, prefix="/attendance", tags=["attendance"])
 api_router.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])

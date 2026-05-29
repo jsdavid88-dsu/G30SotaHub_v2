@@ -2,8 +2,9 @@
 // - 이미지: 원본 크기 (max 화면), 클릭으로 닫기
 // - 영상: <video controls>, range request 자동 활용 (브라우저 native)
 // - ESC 키로 닫기
-import { useEffect } from 'react'
-import { X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { X, PenLine } from 'lucide-react'
+import ImageAnnotator from './ImageAnnotator'
 
 export type MediaItem = {
   id: string
@@ -18,17 +19,27 @@ export type MediaItem = {
 type Props = {
   item: MediaItem | null
   onClose: () => void
+  // 이미지 주석(그리기+코멘트) 활성화 — 기본 true. id 가 attachment UUID 일 때만 동작.
+  annotatable?: boolean
 }
 
-export default function MediaViewer({ item, onClose }: Props) {
+export default function MediaViewer({ item, onClose, annotatable = true }: Props) {
+  const [annotate, setAnnotate] = useState(false)
+
   useEffect(() => {
     if (!item) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    // 주석 모드에서는 ESC 가 그리기 취소 용도일 수 있어 뷰어 닫기는 비활성 (토글로만)
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !annotate) onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [item, onClose])
+  }, [item, onClose, annotate])
+
+  // 뷰어 닫힐 때 주석 모드 리셋
+  useEffect(() => { if (!item) setAnnotate(false) }, [item])
 
   if (!item) return null
+
+  const canAnnotate = annotatable && item.media_type === 'image'
 
   return (
     <div
@@ -53,6 +64,24 @@ export default function MediaViewer({ item, onClose }: Props) {
       >
         <X style={{ width: 20, height: 20 }} />
       </button>
+
+      {/* 주석 모드 토글 (이미지만) */}
+      {canAnnotate && (
+        <button
+          onClick={(e) => { e.stopPropagation(); setAnnotate((v) => !v) }}
+          title="주석 모드 (그리기 + 코멘트)"
+          style={{
+            position: 'absolute', top: 16, right: 64, zIndex: 1,
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            height: 40, padding: '0 14px', borderRadius: 99,
+            background: annotate ? '#10b981' : 'rgba(255,255,255,0.1)',
+            color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+          }}
+        >
+          <PenLine style={{ width: 16, height: 16 }} />
+          {annotate ? '주석 끄기' : '주석'}
+        </button>
+      )}
       {item.file_name && (
         <div style={{
           position: 'absolute', top: 16, left: 16, zIndex: 1,
@@ -65,7 +94,9 @@ export default function MediaViewer({ item, onClose }: Props) {
       )}
 
       <div onClick={(e) => e.stopPropagation()} style={{ maxWidth: '95vw', maxHeight: '90vh' }}>
-        {item.media_type === 'image' ? (
+        {item.media_type === 'image' && annotate ? (
+          <ImageAnnotator attachmentId={item.id} streamUrl={item.stream_url} fileName={item.file_name} />
+        ) : item.media_type === 'image' ? (
           <img
             src={item.stream_url}
             alt={item.file_name || ''}
