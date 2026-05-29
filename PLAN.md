@@ -81,12 +81,11 @@
 - API `/attachments/{id}/annotations` + `/annotations/{id}/replies` (@mention 통합)
 - Frontend `ImageAnnotator` (SVG/HTML overlay + thread 패널) + MediaViewer "주석 모드" 토글
 
-### 🟡 Phase 2.5 C — 영상 annotation (3-5일) — 다음 후보, NAS/ffmpeg 권장 시점
-- `Annotation.timecode_ms` 칼럼 **이미 있음** (j0a1 에서 추가) → 마이그레이션 불필요
-- 영상 특정 시점 마크 + canvas overlay 그리기 + thread
-- 타임라인 마커 + 클릭 점프
-- `/api/v1/attachments/{id}/frame?t=<ms>` (ffmpeg frame extract)
-- MediaViewer 영상에도 ImageAnnotator 류 overlay (timecode 연동)
+### ✅ Phase 2.5 C — 영상 annotation (완료 `d055104`)
+- `VideoAnnotator` — 영상 overlay 그리기(핀/박스/자유선) + 그릴 때 자동 일시정지
+- 현재 시점 → `timecode_ms` 묶음, 타임라인 마커 클릭 → seek + 도형 표시
+- MediaViewer 영상 "주석 모드" 토글, ThreadPanel 공유(@mention)
+- (옵션 미구현) `/attachments/{id}/frame?t=<ms>` ffmpeg frame extract — video seek 으로 충분해 생략
 
 ### ✅ Family grouper (완료 `df8125c`)
 - `jobs/family_grouper.py` — 같은 brand item 끼리 star 패턴 LineageEdge("same_family")
