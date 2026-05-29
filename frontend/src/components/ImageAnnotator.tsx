@@ -280,7 +280,7 @@ export default function ImageAnnotator({
   )
 }
 
-function ThreadPanel({
+export function ThreadPanel({
   annotation, currentUserId, onClose, onDeleteAnnotation, onDeleteReply, replyBody, setReplyBody, onSend,
 }: {
   annotation: Annotation

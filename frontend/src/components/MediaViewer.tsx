@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react'
 import { X, PenLine } from 'lucide-react'
 import ImageAnnotator from './ImageAnnotator'
+import VideoAnnotator from './VideoAnnotator'
 
 export type MediaItem = {
   id: string
@@ -39,7 +40,7 @@ export default function MediaViewer({ item, onClose, annotatable = true }: Props
 
   if (!item) return null
 
-  const canAnnotate = annotatable && item.media_type === 'image'
+  const canAnnotate = annotatable && (item.media_type === 'image' || item.media_type === 'video')
 
   return (
     <div
@@ -96,6 +97,8 @@ export default function MediaViewer({ item, onClose, annotatable = true }: Props
       <div onClick={(e) => e.stopPropagation()} style={{ maxWidth: '95vw', maxHeight: '90vh' }}>
         {item.media_type === 'image' && annotate ? (
           <ImageAnnotator attachmentId={item.id} streamUrl={item.stream_url} fileName={item.file_name} />
+        ) : item.media_type === 'video' && annotate ? (
+          <VideoAnnotator attachmentId={item.id} streamUrl={item.stream_url} />
         ) : item.media_type === 'image' ? (
           <img
             src={item.stream_url}
