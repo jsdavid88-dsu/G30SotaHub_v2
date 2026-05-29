@@ -69,29 +69,28 @@
 
 ## ⏭ 해야 할 일 (우선순위 순)
 
-### 🔥 다음 단계 — A (즉시, 1-2시간)
-**Arca prompt 강화 — brand/family 자동 태그**
-- `arca_brain.py` `SCORE_SYSTEM` 에 brand/family/base_model 추출 명시
-- 예: "LTX 2.3 LoRA" 발견 → `{brand: "LTX", family: "LTX 2.x", base_model: "LTX 2.3"}` 자동
-- Item.free_tags 에 박혀서 검색 "LTX" 치면 family 다 나옴
-- ItemTable 에 brand 컬럼 추가 (옵션)
+### ✅ A — Arca prompt 강화 (완료 `262eb27`)
+- `arca_brain.py` `SCORE_SYSTEM` 카테고리 동적 주입 + brand/family/base_model/modality 추출 (generic — 모델명 하드코딩 X)
+- brand → free_tags → 검색(search.py) + 카테고리 승격(promotions) 자동 연동
+- ArcaPanel 에 모델 계보 칩 (brand 클릭 → 같은 계열 검색 점프)
+- worker 경로(/score-update) 도 brand→free_tags 정합
 
-### 🟡 Phase 2.5 B — 이미지 annotation (2-3일)
-- `Annotation` 모델 — `attachment_id`, `shape_type` (pin/box/freedraw), `geometry: JSONB`
-- `AnnotationComment` 모델 — threaded (mention 통합)
-- API: `/api/v1/attachments/{id}/annotations` CRUD
-- Frontend `ImageAnnotator` — SVG overlay + draw + thread per pin
-- Lightbox 에 "그리기 모드" 토글
+### ✅ Phase 2.5 B — 이미지 annotation (완료 `39dfc95`)
+- `Annotation` + `AnnotationReply` 모델 (kind pin/box/arrow/freedraw, geometry JSONB 0~1 비율, timecode_ms[C 대비])
+- alembic `j0a1` — annotations + annotation_replies
+- API `/attachments/{id}/annotations` + `/annotations/{id}/replies` (@mention 통합)
+- Frontend `ImageAnnotator` (SVG/HTML overlay + thread 패널) + MediaViewer "주석 모드" 토글
 
-### 🟡 Phase 2.5 C — 영상 annotation (3-5일) — NAS/ffmpeg 권장 시점
-- `Annotation.timecode_ms` 칼럼 추가
+### 🟡 Phase 2.5 C — 영상 annotation (3-5일) — 다음 후보, NAS/ffmpeg 권장 시점
+- `Annotation.timecode_ms` 칼럼 **이미 있음** (j0a1 에서 추가) → 마이그레이션 불필요
 - 영상 특정 시점 마크 + canvas overlay 그리기 + thread
 - 타임라인 마커 + 클릭 점프
 - `/api/v1/attachments/{id}/frame?t=<ms>` (ffmpeg frame extract)
+- MediaViewer 영상에도 ImageAnnotator 류 overlay (timecode 연동)
 
-### 🟢 Family grouper (1-2일) — A 의 자연 후속
-- 같은 brand 모델끼리 GraphEdge "same_family" 자동
-- AI 추정 → 사용자 confirm (status='ai_estimated' → 'verified')
+### ✅ Family grouper (완료 `df8125c`)
+- `jobs/family_grouper.py` — 같은 brand item 끼리 star 패턴 LineageEdge("same_family")
+- night_batch grouper step 에 통합, LineageFlow 초록 점선 "계열" 라벨
 
 ### 🟢 GraphNode + GraphEdge 본격 (3-4일)
 - 마스터 설계서 Phase 1 §5.1 잔여
