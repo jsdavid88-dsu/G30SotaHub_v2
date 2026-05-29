@@ -272,15 +272,26 @@ async def step_score_items() -> dict:
 # ── Step 4: Grouper ─────────────────────────────────────────
 
 async def step_run_grouper() -> dict:
-    """Re-run item grouper for cross-source matching."""
+    """Re-run item grouper for cross-source matching + brand family linking."""
     try:
         from app.jobs.grouper import group_items
         result = await group_items()
         logger.info(f"[night] grouper: {result}")
-        return {"step": "grouper", **result}
     except Exception as e:
         logger.exception("[night] grouper failed")
-        return {"step": "grouper", "error": str(e)}
+        result = {"error": str(e)}
+
+    # 같은 brand(계열) 자동 연결 — Arca brand 추출 후속 (same_family edge)
+    try:
+        from app.jobs.family_grouper import build_families
+        fam = await build_families()
+        logger.info(f"[night] families: {fam}")
+        result = {**result, "families": fam.get("families", 0), "family_edges": fam.get("edges", 0)}
+    except Exception as e:
+        logger.exception("[night] family grouper failed")
+        result = {**result, "family_error": str(e)}
+
+    return {"step": "grouper", **result}
 
 
 # ── Step 5: Category Promotion (Gemma4) ─────────────────────

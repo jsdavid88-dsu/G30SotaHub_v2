@@ -75,18 +75,26 @@ export default function LineageFlow({ graph, height = 600 }: Props) {
       },
     }));
 
-    const e: Edge[] = graph.edges.map((edge, idx) => ({
-      id: `e${edge.parent_id}-${edge.child_id}-${idx}`,
-      source: String(edge.parent_id),
-      target: String(edge.child_id),
-      animated: false,
-      style: { stroke: "#6366f1", strokeWidth: 1 },
-      markerEnd: {
-        type: MarkerType.ArrowClosed,
-        color: "#6366f1",
-      },
-      label: edge.relationship_type === "cites" ? "" : undefined,
-    }));
+    const e: Edge[] = graph.edges.map((edge, idx) => {
+      // same_family = Arca brand 추정 관계 → 초록 점선 + "계열" 라벨로 cites(인용)와 구분
+      const isFamily = edge.relationship_type === "same_family";
+      const color = isFamily ? "#10b981" : "#6366f1";
+      return {
+        id: `e${edge.parent_id}-${edge.child_id}-${idx}`,
+        source: String(edge.parent_id),
+        target: String(edge.child_id),
+        animated: false,
+        style: {
+          stroke: color,
+          strokeWidth: isFamily ? 1.5 : 1,
+          strokeDasharray: isFamily ? "5 4" : undefined,
+        },
+        markerEnd: { type: MarkerType.ArrowClosed, color },
+        label: isFamily ? "계열" : undefined,
+        labelStyle: isFamily ? { fill: "#059669", fontSize: 10, fontWeight: 600 } : undefined,
+        labelBgStyle: isFamily ? { fill: "#d1fae5" } : undefined,
+      };
+    });
 
     return { nodes: n, edges: e };
   }, [graph]);
