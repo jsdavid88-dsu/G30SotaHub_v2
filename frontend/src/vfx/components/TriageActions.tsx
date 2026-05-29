@@ -6,7 +6,7 @@ import {
   Wrench, Archive, RotateCcw, Briefcase, Loader2,
 } from "lucide-react";
 import type { Item } from "../types";
-import { triageItem, type TriagePayload } from "../api/items";
+import { triageItem, patchItem, type TriagePayload } from "../api/items";
 
 export type TriageActionsProps = {
   item: Item;
@@ -140,10 +140,9 @@ export default function TriageActions({ item, onDone, size = "sm", onRequestAssi
     buttons.push(
       <Btn key="restore" icon={RotateCcw} label="복귀" color="#4f46e5" bg="#e0e7ff" hoverBg="#c7d2fe"
         onClick={async () => {
-          // 직접 PATCH 사용
+          // 직접 PATCH 사용 (items.ts 는 이미 상단 static import — #17 dynamic 혼용 제거)
           setBusy("복귀");
           try {
-            const { patchItem } = await import("../api/items");
             await patchItem(item.id, { status: "new" });
             onDone();
           } catch (e) {

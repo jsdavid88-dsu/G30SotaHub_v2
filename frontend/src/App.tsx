@@ -1,27 +1,41 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { RoleProvider } from './contexts/RoleContext'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
+// 엔트리 페이지(Login)와 인증 직후 랜딩(Dashboard)은 eager — 즉시 paint.
 import Dashboard from './pages/Dashboard'
 import Login from './pages/Login'
-import AuthCallback from './pages/AuthCallback'
-import Projects from './pages/Projects'
-import Profile from './pages/Profile'
-import DailyWrite from './pages/DailyWrite'
-import DailyFeed from './pages/DailyFeed'
-import Members from './pages/Members'
-import Calendar from './pages/Calendar'
-import Attendance from './pages/Attendance'
-import Weekly from './pages/Weekly'
-import ProjectDetail from './pages/ProjectDetail'
-import Admin from './pages/Admin'
-import Notifications from './pages/Notifications'
-import MemberDetail from './pages/MemberDetail'
-import Sota from './pages/Sota'
-import Reports from './pages/Reports'
+
+// #17: 나머지 Hub 페이지는 route 단위 lazy — 메인 번들에서 분리.
+const AuthCallback = lazy(() => import('./pages/AuthCallback'))
+const Projects = lazy(() => import('./pages/Projects'))
+const Profile = lazy(() => import('./pages/Profile'))
+const DailyWrite = lazy(() => import('./pages/DailyWrite'))
+const DailyFeed = lazy(() => import('./pages/DailyFeed'))
+const Members = lazy(() => import('./pages/Members'))
+const Calendar = lazy(() => import('./pages/Calendar'))
+const Attendance = lazy(() => import('./pages/Attendance'))
+const Weekly = lazy(() => import('./pages/Weekly'))
+const ProjectDetail = lazy(() => import('./pages/ProjectDetail'))
+const Admin = lazy(() => import('./pages/Admin'))
+const Notifications = lazy(() => import('./pages/Notifications'))
+const MemberDetail = lazy(() => import('./pages/MemberDetail'))
+const Sota = lazy(() => import('./pages/Sota'))
+const Reports = lazy(() => import('./pages/Reports'))
 
 // === VFX SOTA Monitor 흡수 (vfx-sota-monitor) ===
-import VfxApp from './vfx/App'
+// #17: lazy load — VFX 서브트리(reactflow 포함)를 별도 async chunk 로 분리.
+// /vfx/* 진입 시에만 로드 → Hub 메인 번들에서 제외.
+const VfxApp = lazy(() => import('./vfx/App'))
+
+function RouteFallback() {
+  return (
+    <div className="flex items-center justify-center h-64">
+      <p className="text-gray-400 text-sm">로딩 중...</p>
+    </div>
+  )
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token, loading } = useAuth()
@@ -37,7 +51,7 @@ function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
-            <Route path="/auth/callback" element={<AuthCallback />} />
+            <Route path="/auth/callback" element={<Suspense fallback={<RouteFallback />}><AuthCallback /></Suspense>} />
 
             {/* Hub Layout — VFX 를 자식으로 nest → 양쪽 사이드바(Hub + VFX) 동시 표시 */}
             <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
@@ -58,7 +72,7 @@ function App() {
               <Route path="/sota" element={<Sota />} />
               <Route path="/reports" element={<Reports />} />
 
-              {/* VFX SOTA Monitor — Hub Layout 의 main 안에 nested. 자체 Sidebar 만 가짐. */}
+              {/* VFX SOTA Monitor — Hub Layout 의 main 안에 nested. Layout 의 Outlet Suspense 가 lazy 로딩 커버. */}
               <Route path="/vfx/*" element={<VfxApp />} />
 
               {/* fallback */}

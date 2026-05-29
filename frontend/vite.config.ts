@@ -6,6 +6,20 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   root: resolve(__dirname),
   plugins: [react(), tailwindcss()],
+  build: {
+    rollupOptions: {
+      output: {
+        // #17: 큰 vendor 를 별도 chunk 로 분리 — 메인 번들 축소 + 캐싱 효율.
+        // reactflow 는 graph/item 페이지(lazy)에서만 import → 이 chunk 도 async 로 남음.
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'react-query': ['@tanstack/react-query'],
+          reactflow: ['reactflow'],
+          icons: ['lucide-react'],
+        },
+      },
+    },
+  },
   server: {
     host: true,                // Tailscale funnel / 외부 노출 위해 0.0.0.0
     port: 3030,                // 머신 포트 충돌 회피 (8000/3000 → 8011/3030)

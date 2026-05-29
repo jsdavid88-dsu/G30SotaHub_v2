@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useRole, type Role } from '../contexts/RoleContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -392,7 +392,10 @@ export default function Layout() {
         {/* Page content + Feed panel */}
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
           <main style={{ flex: 1, overflowY: 'auto', background: '#f8fafc', padding: isWide ? '28px 32px' : isDesktop ? '24px 20px' : '16px 12px' }}>
-            <Outlet />
+            {/* #17: lazy route 페이지 로딩 동안 사이드바/헤더 유지, 본문만 fallback */}
+            <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', padding: '48px 0', color: '#94a3b8', fontSize: 13 }}>로딩 중...</div>}>
+              <Outlet />
+            </Suspense>
           </main>
           <FeedPanel
             collapsed={feedCollapsed}
