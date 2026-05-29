@@ -4,7 +4,7 @@
 // - 타임라인 마커 클릭 → 해당 시점 seek + 도형 표시
 // geometry 는 0~1 비율 좌표 (이미지와 동일). ThreadPanel 은 ImageAnnotator 재사용.
 import { useCallback, useEffect, useRef, useState, type PointerEvent as RPE } from 'react'
-import { MousePointer2, MapPin, Square, PenLine } from 'lucide-react'
+import { MousePointer2, MapPin, Square, PenLine, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { ThreadPanel } from './ImageAnnotator'
 import {
@@ -28,11 +28,13 @@ function msLabel(ms: number): string {
 }
 
 export default function VideoAnnotator({
-  attachmentId, streamUrl,
+  attachmentId, streamUrl, fps,
 }: {
   attachmentId: string
   streamUrl: string
+  fps?: number | null
 }) {
+  const effectiveFps = fps && fps > 0 ? fps : 30
   const { user } = useAuth()
   const [annotations, setAnnotations] = useState<Annotation[]>([])
   const [tool, setTool] = useState<Tool>('view')
@@ -63,6 +65,16 @@ export default function VideoAnnotator({
   }, [])
 
   const pauseVideo = () => { videoRef.current?.pause() }
+
+  // 1프레임씩 앞/뒤 (정밀 프레임 네비). currentTime = n/fps 로 가장 가까운 프레임 seek.
+  const stepFrame = (dir: 1 | -1) => {
+    const v = videoRef.current
+    if (!v) return
+    v.pause()
+    const dt = 1 / effectiveFps
+    v.currentTime = Math.max(0, Math.min(v.duration || 0, v.currentTime + dir * dt))
+  }
+  const currentFrame = Math.round((currentMs / 1000) * effectiveFps)
 
   const onPointerDown = (e: RPE) => {
     if (tool === 'view' || pending) return
@@ -231,6 +243,21 @@ export default function VideoAnnotator({
               }} />
             )}
           </div>
+        </div>
+
+        {/* 프레임 정밀 네비게이션 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={() => stepFrame(-1)} title="이전 프레임"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 2, padding: '5px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', color: '#e2e8f0', cursor: 'pointer', fontSize: 12 }}>
+            <ChevronLeft style={{ width: 14, height: 14 }} /> 1프레임
+          </button>
+          <button onClick={() => stepFrame(1)} title="다음 프레임"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 2, padding: '5px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', color: '#e2e8f0', cursor: 'pointer', fontSize: 12 }}>
+            1프레임 <ChevronRight style={{ width: 14, height: 14 }} />
+          </button>
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', fontVariantNumeric: 'tabular-nums' }}>
+            프레임 {currentFrame} · {msLabel(currentMs)} · {effectiveFps}fps{!fps ? ' (추정)' : ''}
+          </span>
         </div>
 
         {/* 타임라인 마커 */}

@@ -15,6 +15,8 @@ export type MediaItem = {
   stream_url: string
   width?: number | null
   height?: number | null
+  fps?: number | null
+  preview_status?: string | null
 }
 
 type Props = {
@@ -95,10 +97,17 @@ export default function MediaViewer({ item, onClose, annotatable = true }: Props
       )}
 
       <div onClick={(e) => e.stopPropagation()} style={{ maxWidth: '95vw', maxHeight: '90vh' }}>
-        {item.media_type === 'image' && annotate ? (
+        {item.media_type === 'video' && item.preview_status === 'transcoding' ? (
+          <div style={{ color: '#fff', padding: 48, background: 'rgba(255,255,255,0.05)', borderRadius: 12, textAlign: 'center', maxWidth: 480 }}>
+            <p style={{ fontSize: 16, fontWeight: 600 }}>영상 변환 중…</p>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginTop: 8 }}>
+              브라우저 호환 포맷(H.264 MP4)으로 변환하고 있습니다.<br />잠시 후 자동으로 표시됩니다.
+            </p>
+          </div>
+        ) : item.media_type === 'image' && annotate ? (
           <ImageAnnotator attachmentId={item.id} streamUrl={item.stream_url} fileName={item.file_name} />
         ) : item.media_type === 'video' && annotate ? (
-          <VideoAnnotator attachmentId={item.id} streamUrl={item.stream_url} />
+          <VideoAnnotator attachmentId={item.id} streamUrl={item.stream_url} fps={item.fps} />
         ) : item.media_type === 'image' ? (
           <img
             src={item.stream_url}

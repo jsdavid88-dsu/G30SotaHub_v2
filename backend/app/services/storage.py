@@ -115,12 +115,12 @@ def delete_file(relpath: str | None) -> None:
 # ─── ffmpeg — 영상 thumbnail / metadata ───────────────────────────────────
 
 
-def _run_ffmpeg(args: list[str]) -> subprocess.CompletedProcess:
-    """ffmpeg 실행. 미설치 시 FileNotFoundError."""
+def _run_ffmpeg(args: list[str], timeout: int = 60) -> subprocess.CompletedProcess:
+    """ffmpeg 실행. 미설치 시 FileNotFoundError. timeout 기본 60s (트랜스코딩은 길게)."""
     return subprocess.run(
         ["ffmpeg", *args],
         capture_output=True,
-        timeout=60,
+        timeout=timeout,
     )
 
 
@@ -132,8 +132,31 @@ def _run_ffprobe(args: list[str]) -> subprocess.CompletedProcess:
     )
 
 
+# 브라우저 <video> 가 native 디코딩 가능한 코덱 (트랜스코딩 불필요).
+# hevc(h265) 는 OS/하드웨어 의존이라 안전하게 트랜스코딩 대상으로 둠.
+WEB_SAFE_VIDEO_CODECS = {"h264", "vp8", "vp9", "av1"}
+
+
+def is_web_safe_codec(codec: str | None) -> bool:
+    return bool(codec) and codec.lower() in WEB_SAFE_VIDEO_CODECS
+
+
+def _parse_fps(rate: str) -> float | None:
+    """ffprobe r_frame_rate ("30000/1001", "25/1") → float fps."""
+    if not rate or rate == "0/0":
+        return None
+    try:
+        if "/" in rate:
+            num, den = rate.split("/", 1)
+            d = float(den)
+            return round(float(num) / d, 3) if d else None
+        return float(rate)
+    except (ValueError, ZeroDivisionError):
+        return None
+
+
 def probe_video(relpath: str) -> dict:
-    """ffprobe 로 영상 메타 추출. {duration_sec, width, height}.
+    """ffprobe 로 영상 메타 추출. {duration_sec, width, height, fps, codec}.
 
     ffmpeg 미설치 시 빈 dict.
     """
@@ -142,7 +165,7 @@ def probe_video(relpath: str) -> dict:
         result = _run_ffprobe([
             "-v", "error",
             "-select_streams", "v:0",
-            "-show_entries", "stream=width,height,duration",
+            "-show_entries", "stream=width,height,duration,r_frame_rate,codec_name",
             "-of", "default=noprint_wrappers=1",
             str(full),
         ])
@@ -161,6 +184,12 @@ def probe_video(relpath: str) -> dict:
                 meta["height"] = int(float(v))
             elif k == "duration":
                 meta["duration_sec"] = float(v)
+            elif k == "r_frame_rate":
+                fps = _parse_fps(v)
+                if fps:
+                    meta["fps"] = fps
+            elif k == "codec_name":
+                meta["codec"] = v.lower()
         return meta
     except FileNotFoundError:
         logger.warning("ffprobe 미설치 — 영상 메타데이터 추출 skip. ffmpeg 설치 권장.")
@@ -168,6 +197,45 @@ def probe_video(relpath: str) -> dict:
     except Exception as e:
         logger.warning(f"ffprobe 실패: {e}")
         return {}
+
+
+def transcode_to_web(relpath: str) -> str | None:
+    """non-web-safe 영상을 H.264 MP4 웹 프록시로 변환. web relpath 반환.
+
+    원본은 보존. 출력: `{relpath}.web.mp4`. ffmpeg 미설치/실패 시 None (graceful).
+    긴 영상 고려 timeout 30분.
+    """
+    full = get_full_path(relpath)
+    web_relpath = f"{relpath}.web.mp4"
+    web_full = get_full_path(web_relpath)
+    web_full.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        result = _run_ffmpeg(
+            [
+                "-y", "-i", str(full),
+                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                "-pix_fmt", "yuv420p",            # 호환성 (10bit/422 → 8bit 420)
+                "-c:a", "aac", "-b:a", "160k",
+                "-movflags", "+faststart",        # 웹 스트리밍 (moov atom 앞으로)
+                str(web_full),
+            ],
+            timeout=1800,
+        )
+        if result.returncode != 0:
+            logger.warning(
+                f"transcode 실패 (rc={result.returncode}): "
+                f"{result.stderr.decode('utf-8', errors='ignore')[:300]}"
+            )
+            delete_file(web_relpath)
+            return None
+        return web_relpath
+    except FileNotFoundError:
+        logger.warning("ffmpeg 미설치 — 트랜스코딩 skip. 원본 그대로 서빙 (브라우저 호환 시).")
+        return None
+    except Exception as e:
+        logger.warning(f"transcode 실패: {e}")
+        delete_file(web_relpath)
+        return None
 
 
 def extract_video_thumbnail(relpath: str, *, at_seconds: float = 1.0) -> str | None:

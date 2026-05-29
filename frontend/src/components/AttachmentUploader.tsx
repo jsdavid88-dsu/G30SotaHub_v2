@@ -13,6 +13,8 @@ export type UploadedAttachment = {
   width: number | null
   height: number | null
   duration_sec: number | null
+  fps?: number | null
+  preview_status?: string | null
   stream_url: string
   thumbnail_url: string | null
   created_at: string | null

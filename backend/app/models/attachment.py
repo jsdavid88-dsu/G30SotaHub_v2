@@ -51,4 +51,8 @@ class Attachment(UUIDMixin, Base):
     width: Mapped[int | None] = mapped_column(Integer, nullable=True)
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     duration_sec: Mapped[float | None] = mapped_column(Float, nullable=True)    # 영상 길이
+    fps: Mapped[float | None] = mapped_column(Float, nullable=True)             # 영상 프레임레이트 (프레임 정밀 네비)
     thumbnail_relpath: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # 트랜스코딩된 웹 재생용 프록시 (H.264 MP4). non-web-safe 원본일 때만 생성.
+    # 원본(storage_relpath)은 항상 보존. preview_status: pending|transcoding|ready|failed
+    web_relpath: Mapped[str | None] = mapped_column(String(500), nullable=True)

@@ -351,6 +351,8 @@ export default function ProjectMessageBoard({ projectId }: { projectId: string }
                   stream_url: att.stream_url,
                   width: att.width,
                   height: att.height,
+                  fps: att.fps,
+                  preview_status: att.preview_status,
                 })}
               />
             ))}

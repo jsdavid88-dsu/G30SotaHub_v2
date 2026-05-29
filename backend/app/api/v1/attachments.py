@@ -11,13 +11,14 @@
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import mimetypes
 import os
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -69,12 +70,35 @@ def _to_response(att: Attachment) -> dict:
         "width": att.width,
         "height": att.height,
         "duration_sec": att.duration_sec,
+        "fps": att.fps,
+        "preview_status": att.preview_status,
         "created_by": str(att.created_by) if att.created_by else None,
         "created_at": att.created_at.isoformat() if att.created_at else None,
-        # 절대 URL 대신 API path — frontend 에서 그대로 사용
+        # 절대 URL 대신 API path — frontend 에서 그대로 사용 (서버가 web proxy/원본 자동 선택)
         "stream_url": f"/api/v1/attachments/{att.id}/stream",
         "thumbnail_url": f"/api/v1/attachments/{att.id}/thumbnail" if att.thumbnail_relpath or att.media_type == "image" else None,
     }
+
+
+async def _transcode_and_update(att_id: uuid.UUID) -> None:
+    """백그라운드 트랜스코딩 — non-web-safe 영상을 H.264 MP4 프록시로 변환 후 DB 갱신."""
+    from app.database import SessionLocal
+    async with SessionLocal() as db:
+        att = await db.get(Attachment, att_id)
+        if not att or not att.storage_relpath:
+            return
+        relpath = att.storage_relpath
+    # CPU 무거운 ffmpeg 은 별도 스레드 (이벤트루프 블록 방지)
+    web_relpath = await asyncio.to_thread(storage.transcode_to_web, relpath)
+    async with SessionLocal() as db:
+        att = await db.get(Attachment, att_id)
+        if not att:
+            return
+        att.web_relpath = web_relpath
+        # 변환 성공 → web proxy 서빙. 실패 → 원본 서빙 시도 (failed 표시, 브라우저 호환 시 보임)
+        att.preview_status = "ready" if web_relpath else "failed"
+        await db.commit()
+        logger.info(f"transcode done att={att_id} web={'ok' if web_relpath else 'failed→원본'}")
 
 
 @router.post("", status_code=201)
@@ -82,10 +106,12 @@ async def upload_attachment(
     file: Annotated[UploadFile, File(...)],
     owner_type: Annotated[str, Form(...)],
     owner_id: Annotated[str, Form(...)],
+    background: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """이미지 또는 영상 업로드. 영상은 ffmpeg 으로 자동 thumbnail + duration 추출."""
+    """이미지 또는 영상 업로드. 영상은 ffmpeg 으로 thumbnail + duration + fps 추출.
+    non-web-safe 코덱(ProRes/mkv/avi/hevc)은 백그라운드로 H.264 MP4 트랜스코딩."""
     owner_type_enum = _validate_owner_type(owner_type)
     try:
         owner_uuid = uuid.UUID(owner_id)
@@ -112,18 +138,31 @@ async def upload_attachment(
     width: int | None = None
     height: int | None = None
     duration_sec: float | None = None
+    fps: float | None = None
     thumbnail_relpath: str | None = None
+    needs_transcode = False
 
     if media_type == "video":
         meta = storage.probe_video(relpath)
         width = meta.get("width")
         height = meta.get("height")
         duration_sec = meta.get("duration_sec")
+        fps = meta.get("fps")
+        codec = meta.get("codec")
         thumbnail_relpath = storage.extract_video_thumbnail(relpath, at_seconds=min(1.0, (duration_sec or 1) / 3))
+        # codec 을 알아냈고 web-safe 아니면 트랜스코딩 (codec 모르면=ffprobe 실패 → 원본 그대로)
+        needs_transcode = bool(codec) and not storage.is_web_safe_codec(codec)
     elif media_type == "image":
         meta = storage.probe_image(relpath)
         width = meta.get("width")
         height = meta.get("height")
+
+    if media_type == "video":
+        preview_status = "transcoding" if needs_transcode else "ready"
+    elif media_type == "image":
+        preview_status = "ready"
+    else:
+        preview_status = "pending"
 
     att = Attachment(
         owner_type=owner_type_enum,
@@ -137,13 +176,19 @@ async def upload_attachment(
         width=width,
         height=height,
         duration_sec=duration_sec,
+        fps=fps,
         thumbnail_relpath=thumbnail_relpath,
         created_by=current_user.id,
-        preview_status="ready" if (media_type == "image" or thumbnail_relpath) else "pending",
+        preview_status=preview_status,
     )
     db.add(att)
     await db.commit()
     await db.refresh(att)
+
+    # non-web-safe 영상 → 백그라운드 트랜스코딩 (응답은 즉시)
+    if needs_transcode:
+        background.add_task(_transcode_and_update, att.id)
+
     return _to_response(att)
 
 
@@ -213,12 +258,20 @@ async def stream_attachment(
     if not att or not att.storage_relpath:
         raise HTTPException(status_code=404, detail="파일 없음")
 
-    full = storage.get_full_path(att.storage_relpath)
+    # 트랜스코딩된 웹 프록시 우선 (있으면), 없으면 원본
+    serve_relpath = att.web_relpath or att.storage_relpath
+    full = storage.get_full_path(serve_relpath)
     if not full.exists() or not full.is_file():
-        raise HTTPException(status_code=404, detail="실제 파일이 없음 (DB 와 파일 불일치)")
+        # 웹 프록시 경로가 깨졌으면 원본 fallback
+        full = storage.get_full_path(att.storage_relpath)
+        if not full.exists() or not full.is_file():
+            raise HTTPException(status_code=404, detail="실제 파일이 없음 (DB 와 파일 불일치)")
+        serve_relpath = att.storage_relpath
 
     file_size = full.stat().st_size
-    mime = att.mime or mimetypes.guess_type(str(full))[0] or "application/octet-stream"
+    # web 프록시면 mp4, 아니면 원본 mime
+    mime = ("video/mp4" if att.web_relpath and serve_relpath == att.web_relpath
+            else att.mime or mimetypes.guess_type(str(full))[0] or "application/octet-stream")
     range_header = request.headers.get("range")
 
     # 이미지 / 짧은 파일은 FileResponse — Range 불필요
@@ -301,12 +354,15 @@ async def delete_attachment(
     if att.created_by != current_user.id and current_user.role != UserRole.admin:
         raise HTTPException(status_code=403, detail="본인 첨부만 삭제 가능합니다")
 
-    # 파일 + 썸네일 삭제 (DB 먼저 — 트랜잭션 안전)
+    # 파일 + 썸네일 + 웹 프록시 삭제 (DB 먼저 — 트랜잭션 안전)
     relpath = att.storage_relpath
     thumb = att.thumbnail_relpath
+    web = att.web_relpath
     await db.delete(att)
     await db.commit()
 
     storage.delete_file(relpath)
     if thumb:
         storage.delete_file(thumb)
+    if web:
+        storage.delete_file(web)

@@ -39,7 +39,12 @@ winget install ffmpeg
 ffmpeg -version
 ffprobe -version
 ```
-**ffmpeg 없으면 영상 업로드 시 thumbnail/duration 추출 skip** (영상 자체는 업로드/재생 가능). 미설치 시 logger.warning 출력.
+**ffmpeg 없으면:**
+- 영상 thumbnail/duration/fps 추출 skip
+- non-web-safe 영상(ProRes mov / mkv / avi / 일부 hevc) **트랜스코딩 skip → 브라우저 재생 안 될 수 있음**
+- MP4(H.264)/WebM 등 web-safe 원본은 ffmpeg 없어도 정상 재생
+
+ffmpeg 있으면: 업로드 시 non-web-safe 영상을 H.264 MP4 로 자동 변환(원본 보존·백그라운드) + 영상 주석 프레임 정밀 네비(fps) 활성화.
 
 ### 옵션 (이 단계 아직 안 함)
 - **Ollama + gemma4:26b** — 야간 배치 Gemma 분석용. 없으면 야간 배치의 score/filter step 만 skip.
