@@ -14,7 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
+from app.dependencies import get_current_user
 from app.models import Category, Item, ItemCategory
+from app.models.user import User
 from app.schemas.vfx.item import ItemRead
 from app.serializers_vfx import serialize_item
 
@@ -26,6 +28,7 @@ async def search_items(
     q: str = Query(..., min_length=1, description="Search term"),
     limit: int = Query(50, le=200),
     db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     """다양한 필드 + 카테고리 매칭 검색.
 

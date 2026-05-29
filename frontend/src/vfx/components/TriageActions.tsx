@@ -8,11 +8,6 @@ import {
 import type { Item } from "../types";
 import { triageItem, type TriagePayload } from "../api/items";
 
-type AssignModalState = {
-  itemId: number;
-  action: "assign" | "motorhead";
-} | null;
-
 export type TriageActionsProps = {
   item: Item;
   onDone: () => void;

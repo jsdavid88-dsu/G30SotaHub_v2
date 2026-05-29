@@ -7,7 +7,7 @@ export type LineageNode = {
   priority: string | null;
   llm_score: number;
   year: number | null;
-  url: string;
+  url: string | null;
 };
 
 export type LineageEdge = {

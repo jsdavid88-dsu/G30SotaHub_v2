@@ -6,7 +6,9 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.dependencies import get_current_user, require_role
 from app.models import CategorySuggestion, Item
+from app.models.user import User, UserRole
 
 router = APIRouter(prefix="/tags", tags=["tags"])
 
@@ -18,6 +20,7 @@ PROMOTION_THRESHOLD = 5
 async def tag_counts(
     min_count: int = Query(1, ge=1),
     db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     """Aggregate free_tags across all items. Returns [{tag, count}] sorted by count desc."""
     # PostgreSQL JSON: free_tags is a JSON array like ["comfyui", "workflow"]
@@ -37,6 +40,7 @@ async def tag_counts(
 async def list_suggestions(
     status: str | None = None,
     db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     """List category suggestions."""
     stmt = select(CategorySuggestion).order_by(CategorySuggestion.item_count.desc())
@@ -63,8 +67,9 @@ async def list_suggestions(
 async def approve_suggestion(
     suggestion_id: int,
     db: AsyncSession = Depends(get_db),
+    _user: User = Depends(require_role(UserRole.admin, UserRole.professor)),
 ):
-    """Approve a category suggestion — creates the category."""
+    """Approve a category suggestion — creates the category. admin/professor 만."""
     from app.models import Category
 
     sug = await db.get(CategorySuggestion, suggestion_id)
@@ -103,8 +108,9 @@ async def reject_suggestion(
     suggestion_id: int,
     reason: str = Query(""),
     db: AsyncSession = Depends(get_db),
+    _user: User = Depends(require_role(UserRole.admin, UserRole.professor)),
 ):
-    """Reject a category suggestion."""
+    """Reject a category suggestion. admin/professor 만."""
     sug = await db.get(CategorySuggestion, suggestion_id)
     if not sug:
         raise HTTPException(404, "Suggestion not found")

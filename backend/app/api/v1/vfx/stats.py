@@ -6,14 +6,19 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.dependencies import get_current_user
 from app.models import CrawlRun, Item
+from app.models.user import User
 from app.schemas.vfx.stats import DashboardSummary
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
 
 @router.get("/summary", response_model=DashboardSummary)
-async def dashboard_summary(db: AsyncSession = Depends(get_db)):
+async def dashboard_summary(
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
     week_ago = datetime.utcnow() - timedelta(days=7)
 
     total = (await db.execute(select(func.count(Item.id)))).scalar() or 0

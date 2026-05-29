@@ -5,7 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
+from app.dependencies import get_current_user
 from app.models import Category, Item, ItemCategory, LineageEdge
+from app.models.user import User
 from app.schemas.vfx.lineage import LineageEdgeRead, LineageGraph, LineageNode
 
 router = APIRouter(prefix="/lineage", tags=["lineage"])
@@ -28,6 +30,7 @@ async def get_item_lineage(
     item_id: int,
     depth: int = Query(1, ge=1, le=3),
     db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     """Fetch lineage subgraph around a specific item.
 
@@ -86,6 +89,7 @@ async def get_item_lineage(
 async def get_category_lineage(
     slug: str,
     db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     """Full lineage graph for a category — all items in it plus their edges."""
     cat_stmt = select(Category).where(Category.slug == slug)

@@ -9,7 +9,7 @@ class PendingItem(BaseModel):
     source: str
     title: str
     abstract: str | None = None
-    url: str
+    url: str | None = None  # 이슈 #16 P2: manual item 은 URL 없음
     category_slugs: list[str] = []
 
 

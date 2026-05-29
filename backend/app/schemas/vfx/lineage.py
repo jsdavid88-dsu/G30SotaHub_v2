@@ -9,7 +9,7 @@ class LineageNode(BaseModel):
     priority: str | None = None
     llm_score: int = 0
     year: int | None = None
-    url: str
+    url: str | None = None  # 이슈 #16 P2: manual item 은 URL 없음
 
 
 class LineageEdgeRead(BaseModel):

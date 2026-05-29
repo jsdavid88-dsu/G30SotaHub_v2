@@ -6,7 +6,7 @@
 // - 본인 메시지 edit/delete
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import AttachmentUploader, { AttachmentChip, type UploadedAttachment } from './AttachmentUploader'
+import { AttachmentChip, type UploadedAttachment } from './AttachmentUploader'
 import MediaViewer, { type MediaItem } from './MediaViewer'
 
 type Message = {
@@ -106,7 +106,7 @@ export default function ProjectMessageBoard({ projectId }: { projectId: string }
           `/api/v1/attachments?owner_type=project_message&owner_id=${m.id}`,
           { headers: getHeaders() }
         )
-        if (!attRes.ok) return [m.id, []] as const
+        if (!attRes.ok) return [m.id, [] as UploadedAttachment[]] as const
         const arr: UploadedAttachment[] = await attRes.json()
         return [m.id, arr] as const
       }))
