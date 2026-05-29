@@ -121,6 +121,13 @@ async def score_update(
             md["arca"] = u.analysis
             item.item_metadata = md
 
+            # brand 자동 추출 → free_tags 반영 (night_batch 경로와 정합).
+            # 검색(search.py) + 카테고리 승격(step_detect_promotions) 자동 연동.
+            from app.jobs.arca_brain import normalize_brand
+            brand = normalize_brand(u.analysis.get("brand"))
+            if brand:
+                item.free_tags = sorted(set((item.free_tags or []) + [brand]))
+
         count += 1
     await db.commit()
     return ScoreUpdateResult(updated=count)

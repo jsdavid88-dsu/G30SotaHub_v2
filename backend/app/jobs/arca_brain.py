@@ -36,6 +36,30 @@ def _get_client() -> OpenAI:
     )
 
 
+# Gemma 가 brand 로 잘못 뽑는 일반 명사 — free_tags 오염 방지 (방어적 정규화).
+_GENERIC_BRAND_STOPWORDS = {
+    "model", "models", "diffusion", "transformer", "video", "image", "ai",
+    "neural", "network", "lora", "adapter", "none", "null", "n/a", "na",
+    "unknown", "general", "generic", "base", "sota", "vfx", "gan", "vae",
+}
+
+
+def normalize_brand(raw: object) -> str | None:
+    """brand/family/base_model 값 정규화. 일반 명사·빈값·비정상 길이는 버림.
+
+    Gemma 가 프롬프트 규칙대로 소문자/버전제거를 하지만, 방어적으로 한 번 더 거른다.
+    night_batch (직접 경로) + admin score-update (worker 경로) 양쪽에서 공용.
+    """
+    if not raw or not isinstance(raw, str):
+        return None
+    b = raw.strip().lower()
+    if not b or b in _GENERIC_BRAND_STOPWORDS:
+        return None
+    if len(b) < 2 or len(b) > 40:
+        return None
+    return b
+
+
 def _call_gemma(system: str, user: str, temperature: float = 0.2, max_tokens: int = 4000) -> str:
     """Low-level Gemma call. Returns raw text response.
 
@@ -179,31 +203,70 @@ def filter_feed_items(items: list[dict]) -> list[dict]:
 
 # ── 2. Item Scoring ──────────────────────────────────────────
 
-SCORE_SYSTEM = """너는 VFX SOTA Monitor의 분석 AI '아르카'.
+# 카테고리 목록을 하드코딩하지 않는다 — DB 가 source of truth.
+# score_items(categories=...) 로 런타임 주입 → 신규 카테고리 추가 시 프롬프트 자동 반영.
+# (없으면 fallback 문구만 — "best fit slug")
 
-10개 VFX 카테고리:
-1. video_matting 2. video_removal 3. face_parsing 4. point_tracking
-5. head_swap 6. 3dgs 7. beauty 8. korean_text_edit 9. ref_search 10. qc_program
+SCORE_SYSTEM_TEMPLATE = """너는 VFX SOTA Monitor의 분석 AI '아르카'.
+이미지 생성 / 영상 생성 / 3D / 컴퓨터 비전 / VFX 전반의 새 모델·논문·도구를 분석한다.
+
+## 사용 가능한 카테고리 (slug — 이름)
+{category_list}
 
 각 아이템에 대해 JSON 객체를 출력:
-{
+{{
   "id": <번호>,
-  "relevancy_score": <1-10>,
+  "relevancy_score": <1-10, VFX/영상제작 실무 관련성>,
   "priority": "P0"|"P1"|"P2"|"P3"|"WATCH",
-  "category": "<slug>",
+  "category": "<위 목록 중 가장 맞는 slug. 애매하면 가장 가까운 것>",
   "reason": "<2문장 스코어 근거>",
   "verdict": "<한줄평 30-60자>",
-  "tags": ["자유 태그 1-3개"]
-}
+  "tags": ["자유 태그 1-3개 (한국어, 예: 비디오 생성, 페이스 스왑)"],
+  "brand": "<모델의 제품/시리즈 이름. 버전·접미사 떼고 소문자. 없으면 null>",
+  "family": "<상위 모델 계열·아키텍처 이름. 소문자. 없으면 null>",
+  "base_model": "<이게 파생/파인튜닝/로라라면 그 기반 모델 이름. 소문자. 없으면 null>",
+  "modality": "<text-to-video|image-to-video|text-to-image|image-to-image|video-to-video|3d|other 중 하나 또는 null>"
+}}
+
+## brand/family/base_model 추출 규칙 (중요)
+- 제목/내용에 등장하는 **고유 모델 제품명**을 정규화해서 뽑는다.
+- 버전 숫자·접미사를 제거하고 핵심 시리즈명만 남긴다.
+  예) "FooModel-2.3" → "foomodel", "BarVideo XL" → "barvideo", "Baz-v1.5-turbo" → "baz"
+- 로라/어댑터/파인튜닝이면 그 **기반 모델**을 base_model 에 적는다.
+  예) "XXX 스타일 로라 for YYYModel" → brand="xxx", base_model="yyymodel"
+- 특정 브랜드를 미리 정해두지 말고, **텍스트에 실제로 나온 이름만** 사용한다.
+- 일반 명사(diffusion, transformer, video, model 등)는 brand 가 아니다 → null.
+- 확신 없으면 null. 추측하지 마라.
 
 JSON 배열만 출력. 마크다운 금지.
 """
 
 
-def score_items(items: list[dict]) -> list[dict]:
-    """Score items with Gemma4. Returns list of scoring results."""
+def _build_score_system(categories: list[dict] | None) -> str:
+    """카테고리 목록을 프롬프트에 주입. categories=[{slug, name_ko}]."""
+    if categories:
+        lines = []
+        for c in categories:
+            slug = c.get("slug", "")
+            name = c.get("name_ko") or c.get("name_en") or slug
+            if slug:
+                lines.append(f"- {slug} — {name}")
+        category_list = "\n".join(lines) if lines else "(카테고리 미지정 — best fit slug)"
+    else:
+        category_list = "(카테고리 목록 없음 — 가장 적합한 영문 slug 자유 작성)"
+    return SCORE_SYSTEM_TEMPLATE.format(category_list=category_list)
+
+
+def score_items(items: list[dict], categories: list[dict] | None = None) -> list[dict]:
+    """Score items with Gemma4. Returns list of scoring results.
+
+    categories: [{slug, name_ko}] — DB 에서 주입. 하드코딩 대신 런타임 목록 사용.
+    결과에 brand/family/base_model/modality 포함 (모델 계열 자동 태깅 — 검색·승격 연동).
+    """
     if not items:
         return []
+
+    system = _build_score_system(categories)
 
     parts = [f"아래 {len(items)}개 아이템을 분석해줘.\n"]
     for i, item in enumerate(items, 1):
@@ -216,7 +279,7 @@ def score_items(items: list[dict]) -> list[dict]:
         parts.append("")
 
     # Issue #6 fix: 500/item → 1800/item (Gemma4 26B thinking 모델 reasoning 여유)
-    raw = _call_gemma(SCORE_SYSTEM, "\n".join(parts), temperature=0.3, max_tokens=len(items) * 1800)
+    raw = _call_gemma(system, "\n".join(parts), temperature=0.3, max_tokens=len(items) * 1800)
     parsed = _parse_json(raw)
 
     if not isinstance(parsed, list):

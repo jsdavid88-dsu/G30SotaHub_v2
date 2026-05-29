@@ -23,7 +23,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import SessionLocal
-from app.models import Item, ItemCategory, FeedItem, Submission, CategorySuggestion
+from app.models import Item, ItemCategory, Category, FeedItem, Submission, CategorySuggestion
 from app import run_state
 
 logger = logging.getLogger(__name__)
@@ -189,11 +189,17 @@ async def step_filter_feed() -> dict:
 
 async def step_score_items() -> dict:
     """Gemma4 scores unscored items (llm_score=0)."""
-    from app.jobs.arca_brain import score_items
+    from app.jobs.arca_brain import score_items, normalize_brand
 
     scored = 0
 
     async with SessionLocal() as db:
+        # 카테고리 목록을 DB 에서 읽어 Gemma 프롬프트에 주입 (하드코딩 제거 — 신규 카테고리 자동 반영)
+        cat_rows = (await db.execute(
+            select(Category.slug, Category.name_ko).order_by(Category.display_order)
+        )).all()
+        categories = [{"slug": s, "name_ko": n} for s, n in cat_rows]
+
         stmt = select(Item).where(Item.llm_score == 0).order_by(
             Item.discovered_at.desc()
         ).limit(50)
@@ -211,7 +217,7 @@ async def step_score_items() -> dict:
             ]
 
             results = await asyncio.get_running_loop().run_in_executor(
-                None, lambda b=batch_dicts: score_items(b)
+                None, lambda b=batch_dicts: score_items(b, categories)
             )
 
             for j, result in enumerate(results):
@@ -229,17 +235,29 @@ async def step_score_items() -> dict:
                 item.priority = result.get("priority", "WATCH")
                 item.llm_reason = str(result.get("reason", ""))[:500]
 
-                # Free tags from Gemma
-                new_tags = result.get("tags", [])
+                # brand/family/base_model 자동 추출 (LTX/Wan/Flux 등 모델 계열 태깅).
+                # brand 는 free_tags 에 넣어 검색(search.py) + 카테고리 승격(step_detect_promotions) 자동 연동.
+                brand = normalize_brand(result.get("brand"))
+                family = normalize_brand(result.get("family"))
+                base_model = normalize_brand(result.get("base_model"))
+
+                # Free tags from Gemma + brand 태그
+                new_tags = [t for t in (result.get("tags") or []) if isinstance(t, str) and t.strip()]
+                if brand:
+                    new_tags.append(brand)
                 if new_tags:
                     existing = item.free_tags or []
-                    item.free_tags = list(set(existing + new_tags))
+                    item.free_tags = sorted(set(existing + new_tags))
 
-                # Store verdict in metadata
+                # Store verdict + 모델 계보 정보 in metadata
                 md = dict(item.item_metadata or {})
                 md["arca"] = {
                     "verdict": str(result.get("verdict", ""))[:300],
                     "category": result.get("category", ""),
+                    "brand": brand,
+                    "family": family,
+                    "base_model": base_model,
+                    "modality": result.get("modality") or None,
                 }
                 item.item_metadata = md
 

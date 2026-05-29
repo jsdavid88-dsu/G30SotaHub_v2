@@ -1,4 +1,5 @@
-import { Sparkles, AlertTriangle, GitBranch, Wrench, Languages } from "lucide-react";
+import { Sparkles, AlertTriangle, GitBranch, Wrench, Languages, Tag } from "lucide-react";
+import { Link } from "react-router-dom";
 import { cardStyle } from "../design";
 
 export type ArcaAnalysis = {
@@ -8,7 +9,55 @@ export type ArcaAnalysis = {
   translation?: string;
   warning?: string;
   category?: string;
+  // 모델 계보 자동 추출 (night_batch Gemma scoring)
+  brand?: string | null;
+  family?: string | null;
+  base_model?: string | null;
+  modality?: string | null;
 };
+
+const MODALITY_LABELS: Record<string, string> = {
+  "text-to-video": "텍스트→영상",
+  "image-to-video": "이미지→영상",
+  "text-to-image": "텍스트→이미지",
+  "image-to-image": "이미지→이미지",
+  "video-to-video": "영상→영상",
+  "3d": "3D",
+  other: "기타",
+};
+
+function LineageChips({ analysis }: { analysis: ArcaAnalysis }) {
+  const { brand, family, base_model, modality } = analysis;
+  if (!brand && !family && !base_model && !modality) return null;
+
+  const chip: React.CSSProperties = {
+    display: "inline-flex", alignItems: "center", gap: 4,
+    padding: "3px 10px", borderRadius: 99, fontSize: 12, fontWeight: 600,
+    background: "#f1f5f9", color: "var(--color-text-secondary)", whiteSpace: "nowrap",
+  };
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+      {brand && (
+        // 같은 brand 검색으로 점프 — "이 모델 계열 다른 것들" 연관성 드러내기
+        <Link
+          to={`/vfx/search?q=${encodeURIComponent(brand)}`}
+          title={`'${brand}' 계열 전체 보기`}
+          style={{
+            ...chip, textDecoration: "none",
+            background: "var(--color-accent-light)", color: "var(--color-accent-dark)",
+            border: "1px solid #c7d2fe", cursor: "pointer",
+          }}
+        >
+          <Tag style={{ width: 12, height: 12 }} />
+          {brand}
+        </Link>
+      )}
+      {family && family !== brand && <span style={chip}>계열: {family}</span>}
+      {base_model && base_model !== brand && <span style={chip}>기반: {base_model}</span>}
+      {modality && <span style={chip}>{MODALITY_LABELS[modality] || modality}</span>}
+    </div>
+  );
+}
 
 function Section({ icon: Icon, label, children, tone = "default" }: {
   icon: React.ElementType; label: string; children: React.ReactNode;
@@ -37,7 +86,8 @@ function Section({ icon: Icon, label, children, tone = "default" }: {
 export default function ArcaPanel({ analysis }: { analysis: ArcaAnalysis | null }) {
   if (!analysis) return null;
   const { verdict, practical_value, lineage_thought, translation, warning } = analysis;
-  const hasAny = verdict || practical_value || lineage_thought || translation || warning;
+  const hasLineage = analysis.brand || analysis.family || analysis.base_model || analysis.modality;
+  const hasAny = verdict || practical_value || lineage_thought || translation || warning || hasLineage;
   if (!hasAny) return null;
 
   return (
@@ -69,6 +119,8 @@ export default function ArcaPanel({ analysis }: { analysis: ArcaAnalysis | null 
           </p>
         </div>
       )}
+
+      <LineageChips analysis={analysis} />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
         {practical_value && <Section icon={Wrench} label="실무 가치">{practical_value}</Section>}
