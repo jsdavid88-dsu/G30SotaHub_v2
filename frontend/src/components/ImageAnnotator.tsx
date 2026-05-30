@@ -29,6 +29,7 @@ export default function ImageAnnotator({
   fileName?: string | null
 }) {
   const { user } = useAuth()
+  const isPrivileged = user?.role === 'admin' || user?.role === 'professor'
   const [annotations, setAnnotations] = useState<Annotation[]>([])
   const [tool, setTool] = useState<Tool>('view')
   const [draft, setDraft] = useState<Draft>(null)
@@ -254,6 +255,7 @@ export default function ImageAnnotator({
           <ThreadPanel
             annotation={selected}
             currentUserId={user?.id}
+            isPrivileged={isPrivileged}
             onClose={() => setSelectedId(null)}
             onDeleteAnnotation={() => removeAnnotation(selected.id)}
             onDeleteReply={(rid) => deleteReply(selected.id, rid).then(refresh).catch(() => {})}
@@ -281,10 +283,11 @@ export default function ImageAnnotator({
 }
 
 export function ThreadPanel({
-  annotation, currentUserId, onClose, onDeleteAnnotation, onDeleteReply, replyBody, setReplyBody, onSend,
+  annotation, currentUserId, isPrivileged = false, onClose, onDeleteAnnotation, onDeleteReply, replyBody, setReplyBody, onSend,
 }: {
   annotation: Annotation
   currentUserId?: string
+  isPrivileged?: boolean  // admin/professor — 백엔드 _can_modify 와 일치
   onClose: () => void
   onDeleteAnnotation: () => void
   onDeleteReply: (replyId: string) => void
@@ -292,7 +295,7 @@ export function ThreadPanel({
   setReplyBody: (v: string) => void
   onSend: () => void
 }) {
-  const canDelete = currentUserId && annotation.author_id === currentUserId
+  const canDelete = isPrivileged || (currentUserId && annotation.author_id === currentUserId)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: '100%', minHeight: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -323,7 +326,7 @@ export function ThreadPanel({
           <div key={r.id} style={{ padding: 8, borderRadius: 8, background: '#f8fafc' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: '#475569' }}>{r.author_name}</span>
-              {currentUserId === r.author_id && (
+              {(isPrivileged || currentUserId === r.author_id) && (
                 <button onClick={() => onDeleteReply(r.id)}
                   style={{ padding: 2, border: 'none', background: 'none', cursor: 'pointer', color: '#cbd5e1' }}>
                   <Trash2 style={{ width: 12, height: 12 }} />

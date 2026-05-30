@@ -24,6 +24,7 @@ from app.dependencies import get_current_user
 from app.models.annotation import Annotation, AnnotationReply
 from app.models.attachment import Attachment
 from app.models.user import User, UserRole
+from app.services.attachment_access import assert_attachment_access
 from app.services.mentions import create_mention_notifications
 
 router = APIRouter(tags=["annotations"])
@@ -78,7 +79,7 @@ def _annotation_dict(a: Annotation) -> dict:
     }
 
 
-async def _get_annotation_or_404(db: AsyncSession, ann_id: uuid.UUID) -> Annotation:
+async def _get_annotation_or_404(db: AsyncSession, ann_id: uuid.UUID, user: User) -> Annotation:
     res = await db.execute(
         select(Annotation)
         .options(selectinload(Annotation.author), selectinload(Annotation.replies).selectinload(AnnotationReply.author))
@@ -87,6 +88,10 @@ async def _get_annotation_or_404(db: AsyncSession, ann_id: uuid.UUID) -> Annotat
     ann = res.scalar_one_or_none()
     if not ann:
         raise HTTPException(status_code=404, detail="주석을 찾을 수 없습니다")
+    # 이슈 #18 P1: 이 주석이 달린 첨부에 접근 권한 있는지
+    att = await db.get(Attachment, ann.attachment_id)
+    if att is not None:
+        await assert_attachment_access(db, att, user, write=False)
     return ann
 
 
@@ -102,8 +107,10 @@ async def list_annotations(
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    if not await db.get(Attachment, att_id):
+    att = await db.get(Attachment, att_id)
+    if not att:
         raise HTTPException(status_code=404, detail="첨부를 찾을 수 없습니다")
+    await assert_attachment_access(db, att, _user, write=False)
     res = await db.execute(
         select(Annotation)
         .options(selectinload(Annotation.author), selectinload(Annotation.replies).selectinload(AnnotationReply.author))
@@ -121,8 +128,10 @@ async def create_annotation(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    if not await db.get(Attachment, att_id):
+    att = await db.get(Attachment, att_id)
+    if not att:
         raise HTTPException(status_code=404, detail="첨부를 찾을 수 없습니다")
+    await assert_attachment_access(db, att, user, write=False)
     if body.kind not in ALLOWED_KINDS:
         raise HTTPException(status_code=400, detail=f"kind 는 {ALLOWED_KINDS} 중 하나")
 
@@ -143,7 +152,7 @@ async def create_annotation(
             source_label="이미지 주석", target_type="annotation", target_id=ann.id,
         )
     await db.commit()
-    ann = await _get_annotation_or_404(db, ann.id)
+    ann = await _get_annotation_or_404(db, ann.id, user)
     return _annotation_dict(ann)
 
 
@@ -154,7 +163,7 @@ async def update_annotation(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    ann = await _get_annotation_or_404(db, ann_id)
+    ann = await _get_annotation_or_404(db, ann_id, user)
     if not _can_modify(ann.author_id, user):
         raise HTTPException(status_code=403, detail="작성자만 수정 가능합니다")
     if body.geometry is not None:
@@ -162,7 +171,7 @@ async def update_annotation(
     if body.body is not None:
         ann.body = body.body or None
     await db.commit()
-    ann = await _get_annotation_or_404(db, ann_id)
+    ann = await _get_annotation_or_404(db, ann_id, user)
     return _annotation_dict(ann)
 
 
@@ -175,6 +184,9 @@ async def delete_annotation(
     ann = await db.get(Annotation, ann_id)
     if not ann:
         raise HTTPException(status_code=404, detail="주석 없음")
+    att = await db.get(Attachment, ann.attachment_id)
+    if att is not None:
+        await assert_attachment_access(db, att, user, write=False)
     if not _can_modify(ann.author_id, user):
         raise HTTPException(status_code=403, detail="작성자 또는 관리자만 삭제 가능합니다")
     await db.delete(ann)  # cascade 로 replies 삭제
@@ -191,6 +203,9 @@ async def create_reply(
     ann = await db.get(Annotation, ann_id)
     if not ann:
         raise HTTPException(status_code=404, detail="주석 없음")
+    att = await db.get(Attachment, ann.attachment_id)
+    if att is not None:
+        await assert_attachment_access(db, att, user, write=False)
     content = (body.body or "").strip()
     if not content:
         raise HTTPException(status_code=400, detail="내용이 비어있습니다")
@@ -221,6 +236,11 @@ async def delete_reply(
     reply = await db.get(AnnotationReply, reply_id)
     if not reply or reply.annotation_id != ann_id:
         raise HTTPException(status_code=404, detail="답글 없음")
+    ann = await db.get(Annotation, ann_id)
+    if ann is not None:
+        att = await db.get(Attachment, ann.attachment_id)
+        if att is not None:
+            await assert_attachment_access(db, att, user, write=False)
     if not _can_modify(reply.author_id, user):
         raise HTTPException(status_code=403, detail="작성자 또는 관리자만 삭제 가능합니다")
     await db.delete(reply)

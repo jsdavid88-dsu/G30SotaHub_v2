@@ -41,9 +41,23 @@ def get_base_path() -> Path:
     return p
 
 
+class StorageError(Exception):
+    """저장 관련 오류 (크기 초과, 경로 escape 등)."""
+
+
 def get_full_path(relpath: str) -> Path:
-    """상대 경로를 절대 경로로 변환."""
-    return get_base_path() / relpath
+    """상대 경로를 절대 경로로 변환. base 디렉토리 밖으로 escape 시 StorageError.
+
+    이슈 #18 P2: DB relpath 에 '../' 가 섞여도 storage base 밖을 못 건드리게 방어.
+    (현재 relpath 는 서버가 uuid 로 생성하지만 defense-in-depth)
+    """
+    base = get_base_path()
+    full = (base / relpath).resolve()
+    try:
+        full.relative_to(base)
+    except ValueError:
+        raise StorageError(f"경로가 storage base 를 벗어남: {relpath!r}")
+    return full
 
 
 # ─── 미디어 타입 ──────────────────────────────────────────────────────────
@@ -75,10 +89,14 @@ def save_upload(
     original_filename: str,
     owner_type: str,
     owner_id: uuid.UUID | str,
+    max_bytes: int | None = None,
 ) -> tuple[str, int]:
     """업로드 파일을 storage 에 저장. relpath + 바이트 크기 반환.
 
     경로 패턴: `{owner_type}/{YYYY}/{MM}/{owner_id}/{uuid}_{filename}`
+
+    이슈 #18 P1: max_bytes 지정 시 쓰는 도중 초과하면 즉시 중단 + 부분 파일 삭제 +
+    StorageError (전체를 다 받은 뒤 검사하지 않음 → 디스크/IO 낭비·DoS 방지).
     """
     safe_name = Path(original_filename).name  # path traversal 방지
     now = datetime.utcnow()
@@ -90,22 +108,32 @@ def save_upload(
     full.parent.mkdir(parents=True, exist_ok=True)
 
     size = 0
-    with open(full, "wb") as dst:
-        while True:
-            chunk = src.read(1024 * 1024)  # 1MB 청크
-            if not chunk:
-                break
-            dst.write(chunk)
-            size += len(chunk)
+    try:
+        with open(full, "wb") as dst:
+            while True:
+                chunk = src.read(1024 * 1024)  # 1MB 청크
+                if not chunk:
+                    break
+                size += len(chunk)
+                if max_bytes is not None and size > max_bytes:
+                    raise StorageError(f"파일이 너무 큼 (> {max_bytes} bytes)")
+                dst.write(chunk)
+    except StorageError:
+        # 부분 저장 파일 정리 후 전파
+        try:
+            full.unlink(missing_ok=True)
+        except Exception:
+            pass
+        raise
     return relpath, size
 
 
 def delete_file(relpath: str | None) -> None:
-    """relpath 의 파일 + (가능하면) parent 폴더 정리."""
+    """relpath 의 파일 정리. StorageError(경로 escape) 포함 모든 예외 swallow."""
     if not relpath:
         return
-    full = get_full_path(relpath)
     try:
+        full = get_full_path(relpath)  # StorageError 가능
         if full.exists():
             full.unlink()
     except Exception as e:

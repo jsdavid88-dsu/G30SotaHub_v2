@@ -28,6 +28,7 @@ from app.dependencies import get_current_user
 from app.models.attachment import Attachment, AttachmentOwnerType
 from app.models.user import User, UserRole
 from app.services import storage
+from app.services.attachment_access import assert_attachment_access, assert_owner_access
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -120,16 +121,19 @@ async def upload_attachment(
 
     mime = _validate_mime(file.content_type)
 
-    # 저장
-    relpath, size = storage.save_upload(
-        file.file,
-        original_filename=file.filename or "unnamed",
-        owner_type=owner_type_enum.value,
-        owner_id=owner_uuid,
-    )
-    if size > MAX_FILE_SIZE:
-        # 큰 파일이라 다 받은 후 삭제 (적합한 시점에 streaming size check 가능)
-        storage.delete_file(relpath)
+    # 이슈 #18 P1: owner 쓰기 권한 검사 (파일 받기 전)
+    await assert_owner_access(db, owner_type_enum, owner_uuid, current_user, write=True)
+
+    # 저장 — 쓰는 도중 MAX_FILE_SIZE 초과 시 즉시 중단 + 부분 파일 삭제 (streaming abort)
+    try:
+        relpath, size = storage.save_upload(
+            file.file,
+            original_filename=file.filename or "unnamed",
+            owner_type=owner_type_enum.value,
+            owner_id=owner_uuid,
+            max_bytes=MAX_FILE_SIZE,
+        )
+    except storage.StorageError:
         raise HTTPException(status_code=413, detail=f"파일이 너무 큽니다 (max {MAX_FILE_SIZE // (1024*1024)}MB)")
 
     media_type = storage.detect_media_type(mime, file.filename)
@@ -206,6 +210,9 @@ async def list_attachments(
     except ValueError:
         raise HTTPException(status_code=400, detail="owner_id UUID 아님")
 
+    # 이슈 #18 P1: 이 owner 의 첨부를 볼 권한 검사
+    await assert_owner_access(db, owner_type_enum, owner_uuid, _user, write=False)
+
     stmt = (
         select(Attachment)
         .where(Attachment.owner_type == owner_type_enum, Attachment.owner_id == owner_uuid)
@@ -225,24 +232,48 @@ async def get_attachment(
     att = await db.get(Attachment, att_id)
     if not att:
         raise HTTPException(status_code=404, detail="첨부를 찾을 수 없음")
+    await assert_attachment_access(db, att, _user, write=False)
     return _to_response(att)
 
 
+def _range_416(file_size: int) -> HTTPException:
+    return HTTPException(
+        status_code=416,
+        detail="Range Not Satisfiable",
+        headers={"Content-Range": f"bytes */{file_size}"},
+    )
+
+
 def _parse_range(range_header: str, file_size: int) -> tuple[int, int]:
-    """`bytes=START-END` 형식 파싱. 둘 다 inclusive."""
+    """`bytes=START-END` / `bytes=START-` / `bytes=-SUFFIX` 파싱 (inclusive).
+
+    이슈 #18 P2: suffix range(bytes=-N, 마지막 N바이트) 지원 + 범위 벗어나면 416.
+    """
     units, _, ranges = range_header.partition("=")
     if units.strip().lower() != "bytes":
         raise HTTPException(status_code=400, detail="Range 단위는 bytes 만")
-    start_s, _, end_s = ranges.partition("-")
+    start_s, sep, end_s = ranges.partition("-")
+    start_s, end_s = start_s.strip(), end_s.strip()
+    if not sep or (start_s == "" and end_s == ""):
+        raise _range_416(file_size)
     try:
-        start = int(start_s) if start_s.strip() else 0
-        end = int(end_s) if end_s.strip() else file_size - 1
+        if start_s == "":
+            # suffix: bytes=-N → 마지막 N 바이트
+            n = int(end_s)
+            if n <= 0:
+                raise _range_416(file_size)
+            start = max(0, file_size - n)
+            end = file_size - 1
+        else:
+            start = int(start_s)
+            end = int(end_s) if end_s else file_size - 1
     except ValueError:
         raise HTTPException(status_code=400, detail="Range 값 잘못됨")
-    if start > end or end >= file_size:
+    # 범위 벗어남 → 416
+    if start < 0 or start >= file_size or start > end:
+        raise _range_416(file_size)
+    if end >= file_size:
         end = file_size - 1
-    if start < 0:
-        start = 0
     return start, end
 
 
@@ -257,6 +288,7 @@ async def stream_attachment(
     att = await db.get(Attachment, att_id)
     if not att or not att.storage_relpath:
         raise HTTPException(status_code=404, detail="파일 없음")
+    await assert_attachment_access(db, att, _user, write=False)
 
     # 트랜스코딩된 웹 프록시 우선 (있으면), 없으면 원본
     serve_relpath = att.web_relpath or att.storage_relpath
@@ -317,6 +349,7 @@ async def get_thumbnail(
     att = await db.get(Attachment, att_id)
     if not att:
         raise HTTPException(status_code=404, detail="첨부 없음")
+    await assert_attachment_access(db, att, _user, write=False)
 
     # 영상 — 썸네일 우선, 없으면 try-extract once
     if att.media_type == "video":

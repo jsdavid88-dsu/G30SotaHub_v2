@@ -36,6 +36,7 @@ export default function VideoAnnotator({
 }) {
   const effectiveFps = fps && fps > 0 ? fps : 30
   const { user } = useAuth()
+  const isPrivileged = user?.role === 'admin' || user?.role === 'professor'
   const [annotations, setAnnotations] = useState<Annotation[]>([])
   const [tool, setTool] = useState<Tool>('view')
   const [draft, setDraft] = useState<Draft>(null)
@@ -300,7 +301,7 @@ export default function VideoAnnotator({
           </div>
         ) : selected ? (
           <ThreadPanel
-            annotation={selected} currentUserId={user?.id}
+            annotation={selected} currentUserId={user?.id} isPrivileged={isPrivileged}
             onClose={() => setSelectedId(null)}
             onDeleteAnnotation={() => removeAnnotation(selected.id)}
             onDeleteReply={(rid) => deleteReply(selected.id, rid).then(refresh).catch(() => {})}
