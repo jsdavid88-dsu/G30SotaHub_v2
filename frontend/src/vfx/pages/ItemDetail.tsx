@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ExternalLink, Star, Layers, Github, Users, CheckCircle2 } from "lucide-react";
-import { fetchItem, fetchSiblings } from "../api/items";
+import { ChevronLeft, ExternalLink, Star, Layers, Github, Users, CheckCircle2, BookOpen, Sparkles, Loader2 } from "lucide-react";
+import { fetchItem, fetchSiblings, generateWiki } from "../api/items";
 import { fetchItemLineage } from "../api/lineage";
+import { useRole } from "../../contexts/RoleContext";
 import type { Item } from "../types";
 import SourceBadge from "../components/SourceBadge";
 import PriorityBadge from "../components/PriorityBadge";
@@ -86,7 +87,10 @@ export default function ItemDetail() {
   const { id } = useParams<{ id: string }>();
   const itemId = id ? Number(id) : undefined;
   const qc = useQueryClient();
+  const { currentRole } = useRole();
+  const canEditWiki = currentRole === "admin" || currentRole === "professor";
   const [assignModal, setAssignModal] = useState<AssignModalState>(null);
+  const [genWiki, setGenWiki] = useState(false);
 
   const { data: item, refetch } = useQuery({
     queryKey: ["item", id], queryFn: () => fetchItem(itemId!), enabled: !!itemId,
@@ -101,6 +105,19 @@ export default function ItemDetail() {
   const refreshAll = () => {
     refetch();
     qc.invalidateQueries({ queryKey: ["items"] });
+  };
+
+  const handleGenWiki = async () => {
+    if (!itemId || genWiki) return;
+    setGenWiki(true);
+    try {
+      await generateWiki(itemId);
+      refetch();
+    } catch (e) {
+      alert(`Arca wiki 생성 실패: ${e instanceof Error ? e.message : String(e)}\n(Ollama/Gemma 연결 확인)`);
+    } finally {
+      setGenWiki(false);
+    }
   };
 
   if (!item) return <div style={{ color: "var(--color-text-muted)" }}>Loading...</div>;
@@ -354,6 +371,13 @@ export default function ItemDetail() {
 
       {arca && <div style={{ marginBottom: 24 }}><ArcaPanel analysis={arca} /></div>}
 
+      <WikiSection
+        body={item.wiki_body}
+        canEdit={canEditWiki}
+        generating={genWiki}
+        onGenerate={handleGenWiki}
+      />
+
       {siblings.length > 0 && (
         <section style={{ ...cardStyle, marginBottom: 24, overflow: "hidden" }}>
           <div style={sectionHeaderStyle}>
@@ -410,5 +434,72 @@ export default function ItemDetail() {
         onDone={refreshAll}
       />
     </div>
+  );
+}
+
+// ── Wiki 섹션 (Karpathy 온톨로지 wiki tier) ──────────────────────
+// 간단 Markdown 렌더: ## 헤더 / - 리스트 / [[wikilink]] → 검색 점프
+function renderWikiBody(body: string) {
+  const parseLinks = (text: string, kb: string) => {
+    const out: ReactNode[] = [];
+    const re = /\[\[([^\]]+)\]\]/g;
+    let last = 0;
+    let m: RegExpExecArray | null;
+    let k = 0;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index > last) out.push(text.slice(last, m.index));
+      const term = m[1].trim();
+      out.push(
+        <Link key={`${kb}-${k++}`} to={`/vfx/search?q=${encodeURIComponent(term)}`}
+          style={{ color: "var(--color-accent)", fontWeight: 600, textDecoration: "none" }}>
+          {term}
+        </Link>
+      );
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) out.push(text.slice(last));
+    return out;
+  };
+  return body.split("\n").map((line, i) => {
+    const key = `w${i}`;
+    if (line.startsWith("## ")) return <h4 key={key} style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)", margin: "14px 0 6px" }}>{line.slice(3)}</h4>;
+    if (line.startsWith("# ")) return <h3 key={key} style={{ fontSize: 16, fontWeight: 700, color: "var(--color-text-primary)", margin: "16px 0 8px" }}>{line.slice(2)}</h3>;
+    if (line.trim().startsWith("- ")) return <li key={key} style={{ fontSize: 13, color: "var(--color-text-secondary)", marginLeft: 18, lineHeight: 1.7 }}>{parseLinks(line.trim().slice(2), key)}</li>;
+    if (!line.trim()) return <div key={key} style={{ height: 6 }} />;
+    return <p key={key} style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.7, margin: "2px 0" }}>{parseLinks(line, key)}</p>;
+  });
+}
+
+function WikiSection({ body, canEdit, generating, onGenerate }: {
+  body?: string | null;
+  canEdit: boolean;
+  generating: boolean;
+  onGenerate: () => void;
+}) {
+  return (
+    <section style={{ ...cardStyle, marginBottom: 24, overflow: "hidden" }}>
+      <div style={{ ...sectionHeaderStyle, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div style={{ ...sectionTitleStyle, display: "flex", alignItems: "center", gap: 8 }}>
+          <BookOpen style={{ width: 16, height: 16, color: "var(--color-accent)" }} />
+          Wiki <span style={{ fontSize: 12, fontWeight: 400, color: "var(--color-text-muted)" }}>아르카 정리</span>
+        </div>
+        {canEdit && (
+          <button onClick={onGenerate} disabled={generating}
+            style={{ ...btnPrimary, opacity: generating ? 0.6 : 1, cursor: generating ? "not-allowed" : "pointer" }}>
+            {generating
+              ? <Loader2 style={{ width: 13, height: 13, animation: "spin 0.8s linear infinite" }} />
+              : <Sparkles style={{ width: 13, height: 13 }} />}
+            {body ? "재생성" : "Arca 초안 생성"}
+          </button>
+        )}
+      </div>
+      <div style={{ padding: 20 }}>
+        {body
+          ? <div>{renderWikiBody(body)}</div>
+          : <p style={{ fontSize: 13, color: "var(--color-text-muted)" }}>
+              아직 wiki 가 없습니다.{canEdit ? " 위 버튼으로 Arca 초안을 생성하세요." : ""}
+            </p>}
+      </div>
+    </section>
   );
 }

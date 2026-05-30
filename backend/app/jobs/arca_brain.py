@@ -327,3 +327,44 @@ def suggest_category_promotion(tag: str, item_count: int, sample_titles: list[st
     if not isinstance(parsed, dict):
         return None
     return parsed
+
+
+# ── 4. Wiki 초안 생성 (Karpathy 온톨로지 wiki tier) ───────────
+
+WIKI_SYSTEM = """너는 VFX SOTA Monitor의 지식 정리 AI '아르카'.
+주어진 모델/논문/도구를 연구실 위키 노드로 정리한다. 한국어 Markdown.
+
+출력 JSON:
+{
+  "description": "50자 이내 핵심 한 줄 (무엇을 하는 모델인지)",
+  "wiki_body": "## 개요\\n...\\n## 핵심 기여\\n- ...\\n## 한계·주의\\n- ...\\n## 관련\\n- [[관련 모델/계열/카테고리]]\\n",
+  "wikilinks": ["연결할 모델·계열·카테고리 이름 1-6개 (소문자)"]
+}
+
+wiki_body 규칙:
+- 한국어 Markdown. 섹션: 개요 / 핵심 기여 / 한계·주의 / 관련.
+- 관련 모델·계열·카테고리·기반기술은 반드시 `[[이름]]` (Obsidian 위키링크) 형식으로 표기.
+  예: "[[ltx]] 계열의 확장", "[[video_generation]] 분야".
+- 주어진 제목/내용 기반으로만. 추측·창작 금지. 모르면 그 섹션 생략.
+- 간결하게 (전체 200~500자).
+
+JSON만 출력. 마크다운 코드펜스 금지."""
+
+
+def generate_wiki_draft(item: dict) -> dict | None:
+    """모델 1개의 wiki 초안 생성. {description, wiki_body, wikilinks} 또는 None.
+
+    item: {title, source, abstract}. Ollama 미연결/파싱 실패 시 None (graceful).
+    """
+    user = (
+        f"제목: {item.get('title', '?')}\n"
+        f"소스: {item.get('source', '?')}\n"
+        f"내용:\n{(item.get('abstract') or '')[:2000]}"
+    )
+    raw = _call_gemma(WIKI_SYSTEM, user, temperature=0.3, max_tokens=2500)
+    parsed = _parse_json(raw)
+    if not isinstance(parsed, dict):
+        snippet = raw[:400].replace("\n", "\\n") if raw else "<empty>"
+        logger.warning(f"Wiki 생성 파싱 실패: {snippet!r}")
+        return None
+    return parsed

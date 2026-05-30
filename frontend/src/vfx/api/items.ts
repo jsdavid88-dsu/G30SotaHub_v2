@@ -69,3 +69,7 @@ export type TriagePayload = {
 
 export const triageItem = (id: number, body: TriagePayload) =>
   apiPost<Item>(`/items/${id}/triage`, body);
+
+// Arca wiki 초안 자동 생성 (Karpathy 온톨로지 wiki tier). admin/professor.
+export const generateWiki = (id: number) =>
+  apiPost<Item>(`/items/${id}/generate-wiki`, {});

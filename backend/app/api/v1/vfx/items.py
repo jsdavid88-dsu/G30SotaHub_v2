@@ -3,6 +3,7 @@
 ItemRead 응답에 assignments (Hub 학생 배정 정보) 자동 eager-load.
 Triage 워크플로우 (2026-05-07): PATCH /items/{id} + POST /items/{id}/triage.
 """
+import asyncio
 from datetime import date, datetime
 from typing import Literal
 import uuid
@@ -18,7 +19,7 @@ from app.database import get_db
 from app.dependencies import get_current_user, require_role
 from app.models import Category, Item, ItemCategory, User, UserRole
 from app.models.sota import SotaAssignment, SotaAssignmentStatus, SotaReview
-from app.models.vfx_item import LifecycleStatus
+from app.models.vfx_item import ConfidenceStatus, LifecycleStatus
 from app.schemas.vfx.item import ItemRead
 from app.serializers_vfx import serialize_item
 
@@ -285,3 +286,49 @@ def _stamp_metadata(item: Item, key: str, value: str) -> None:
     md[key] = value
     md["_last_triage_at"] = datetime.utcnow().isoformat()
     item.item_metadata = md
+
+
+# ── Wiki 초안 자동 생성 (Karpathy 온톨로지 wiki tier) ─────────────────────
+
+@router.post("/{item_id}/generate-wiki", response_model=ItemRead)
+async def generate_item_wiki(
+    item_id: int,
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(require_role(UserRole.admin, UserRole.professor)),
+):
+    """Arca(Gemma)가 이 모델의 wiki 초안을 자동 생성 → wiki_body + description 채움.
+
+    Karpathy 온톨로지 wiki tier 의 실구현. wiki_body 에 [[wikilink]] 포함.
+    confidence_status 는 unverified 로 (사람 검토 전). Ollama 필요 — 실패 시 503.
+    """
+    item = await _load_item(db, item_id)
+    from app.jobs.arca_brain import generate_wiki_draft
+
+    result = await asyncio.get_running_loop().run_in_executor(
+        None,
+        lambda: generate_wiki_draft({
+            "title": item.title, "source": item.source, "abstract": item.abstract,
+        }),
+    )
+    if not result:
+        raise HTTPException(status_code=503, detail="Arca wiki 생성 실패 (Ollama/Gemma 연결 확인)")
+
+    if result.get("wiki_body"):
+        item.wiki_body = str(result["wiki_body"])
+    if result.get("description"):
+        item.description = str(result["description"])[:500]
+
+    # wikilinks → item_metadata.arca.wikilinks (추후 그래프 엣지 자동화용)
+    md = dict(item.item_metadata or {})
+    arca = dict(md.get("arca") or {})
+    links = result.get("wikilinks")
+    if isinstance(links, list):
+        arca["wikilinks"] = [str(x) for x in links][:10]
+    md["arca"] = arca
+    item.item_metadata = md
+
+    item.confidence_status = ConfidenceStatus.unverified  # Arca 생성 → 사람 검토 전
+    item.version = (item.version or 1) + 1
+    await db.commit()
+    item = await _load_item(db, item_id)
+    return serialize_item(item)

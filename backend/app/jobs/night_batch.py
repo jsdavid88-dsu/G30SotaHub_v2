@@ -18,7 +18,7 @@ import hashlib
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select, func, text, update as sql_update
+from sqlalchemy import select, func, or_, text, update as sql_update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -269,6 +269,57 @@ async def step_score_items() -> dict:
     return {"step": "scoring", "scored": scored, "total": len(items)}
 
 
+# ── Step 3.5: Wiki 자동 생성 (Karpathy wiki tier — Ingest) ───
+
+# 야간 1회당 자동 wiki 생성 상한 (item 당 Gemma 1회 — 토큰/시간 보호)
+WIKI_BATCH_LIMIT = 5
+
+
+async def step_generate_wiki() -> dict:
+    """고득점(P0/P1) + wiki 없는 모델에 Arca wiki 초안 자동 생성."""
+    from app.jobs.arca_brain import generate_wiki_draft, normalize_brand
+
+    generated = 0
+    async with SessionLocal() as db:
+        stmt = (
+            select(Item)
+            .where(
+                Item.priority.in_(("P0", "P1")),
+                or_(Item.wiki_body.is_(None), Item.wiki_body == ""),
+            )
+            .order_by(Item.discovered_at.desc())
+            .limit(WIKI_BATCH_LIMIT)
+        )
+        items = list((await db.execute(stmt)).scalars().all())
+        if not items:
+            return {"step": "wiki", "generated": 0, "candidates": 0}
+
+        loop = asyncio.get_running_loop()
+        for item in items:
+            payload = {"title": item.title, "source": item.source, "abstract": item.abstract}
+            result = await loop.run_in_executor(None, lambda p=payload: generate_wiki_draft(p))
+            if not result:
+                continue
+            if result.get("wiki_body"):
+                item.wiki_body = str(result["wiki_body"])
+            if result.get("description") and not item.description:
+                item.description = str(result["description"])[:500]
+            md = dict(item.item_metadata or {})
+            arca = dict(md.get("arca") or {})
+            links = result.get("wikilinks")
+            if isinstance(links, list):
+                arca["wikilinks"] = [str(x) for x in links][:10]
+            md["arca"] = arca
+            item.item_metadata = md
+            item.version = (item.version or 1) + 1
+            generated += 1
+
+        await db.commit()
+
+    logger.info(f"[night] wiki: {generated}/{len(items)} 생성")
+    return {"step": "wiki", "generated": generated, "candidates": len(items)}
+
+
 # ── Step 4: Grouper ─────────────────────────────────────────
 
 async def step_run_grouper() -> dict:
@@ -394,44 +445,50 @@ async def run_night_batch() -> list[dict]:
     """
     logger.info("========== Night Batch Started ==========")
     results = []
-    TOTAL_STEPS = 6
+    TOTAL_STEPS = 7
 
     # Step 0: Fresh crawl
-    run_state.update(stage="0/6 자동 수집 (arxiv/github/hf/reddit)", progress=0.05)
+    run_state.update(stage="0/7 자동 수집 (arxiv/github/hf/reddit)", progress=0.05)
     r = await step_crawl_all_sources()
     results.append(r)
     run_state.update(detail=f"수집: 연구 {r.get('research_new', 0)} + 피드 {r.get('feed_new', 0)}", progress=0.18)
 
     # Step 1: Submissions
-    run_state.update(stage="1/6 제보 처리 (Crawl4AI)", progress=0.20)
+    run_state.update(stage="1/7 제보 처리 (Crawl4AI)", progress=0.20)
     r = await step_process_submissions()
     results.append(r)
     run_state.update(detail=f"제보: {r.get('processed', 0)} done, {r.get('failed', 0)} failed", progress=0.30)
 
     # Step 2: Feed filter
-    run_state.update(stage="2/6 피드 필터링 (Gemma4)", progress=0.32)
+    run_state.update(stage="2/7 피드 필터링 (Gemma4)", progress=0.32)
     r = await step_filter_feed()
     results.append(r)
     run_state.update(detail=f"피드: {r.get('kept', 0)} 유지, {r.get('removed', 0)} 제거", progress=0.45)
 
     # Step 3: Score
-    run_state.update(stage="3/6 아이템 분석 (Gemma4 Scoring)", progress=0.48)
+    run_state.update(stage="3/7 아이템 분석 (Gemma4 Scoring)", progress=0.45)
     r = await step_score_items()
     results.append(r)
-    run_state.update(detail=f"분석: {r.get('scored', 0)}/{r.get('total', 0)} scored", progress=0.72)
+    run_state.update(detail=f"분석: {r.get('scored', 0)}/{r.get('total', 0)} scored", progress=0.62)
+
+    # Step 3.5: Wiki 자동 생성 (P0/P1)
+    run_state.update(stage="4/7 위키 초안 생성 (Gemma4)", progress=0.65)
+    r = await step_generate_wiki()
+    results.append(r)
+    run_state.update(detail=f"위키: {r.get('generated', 0)} 생성", progress=0.74)
 
     # Step 4: Grouper
-    run_state.update(stage="4/6 아이템 그룹핑", progress=0.75)
+    run_state.update(stage="5/7 아이템 그룹핑", progress=0.76)
     r = await step_run_grouper()
     results.append(r)
     run_state.update(progress=0.85)
 
     # Step 5: Promotion
-    run_state.update(stage="5/6 카테고리 승격 검토 (Gemma4)", progress=0.88)
+    run_state.update(stage="6/7 카테고리 승격 검토 (Gemma4)", progress=0.88)
     r = await step_detect_promotions()
     results.append(r)
     run_state.update(
-        stage="6/6 마무리",
+        stage="7/7 마무리",
         detail=f"신규 카테고리 제안: {r.get('new_suggestions', 0)}",
         progress=1.0,
     )
