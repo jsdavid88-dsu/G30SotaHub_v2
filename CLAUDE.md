@@ -5,6 +5,24 @@
 
 ---
 
+## 🖥 5090 운영 — 진단 도구 (5090 PC 클로드용)
+
+> 이 repo 가 **5090 PC** 에서 운영될 때. 운영 상세는 [`SETUP_5090.md`](SETUP_5090.md) 참조.
+
+**진단(읽기/검증 도구)은 사용자 자연어로 바로 실행 가능:**
+
+| 사용자가 이렇게 말하면 | 실행 |
+|----------------------|------|
+| "진단" / "점검" / "#6 #7 확인" / "상태 봐줘" | `.\diagnose.ps1` — 출력 전체를 사용자에게 보여줌 (소스별 item·crawl 이력·스코어링·brand) |
+| "크롤 돌려봐" / "수집 테스트" | `.\diagnose.ps1 --crawl` (소스별 fetched/new/error + 진단 로그) |
+| "Gemma 점수 테스트" / "스코어링 돌려" | `.\diagnose.ps1 --score` (Ollama 필요, `Gemma usage:` 로그) |
+
+- **알려진 활성 이슈**: #6(Gemma 파싱), #7(크롤러 소스 편중) → `diagnose.py` 가 검증 도구. 결과를 사용자가 복붙해 공유하면 원격 진단 가능.
+
+> ⚠️ **상태 변경 작업(마이그레이션·배포·서버 실행)은 자동 매핑하지 않는다.** `git pull` / `alembic upgrade head` / `npm ci` / `.\start.ps1` 은 [`SETUP_5090.md`](SETUP_5090.md) §4 절차에 따라 **사용자가 의식적으로 지시할 때만** 실행 (특히 `alembic upgrade` 는 스키마 변경이므로 임의 실행 금지). ffmpeg 미설치 시 `winget install ffmpeg`.
+
+---
+
 ## 🚨 통합 컨텍스트 (2026-04-30~) — 반드시 먼저 읽기
 
 본 폴더 `G30SotaHub_v2` 는 두 별개 프로젝트를 통합하여 진화한 **R&D Knowledge Graph Platform**:
