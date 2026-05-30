@@ -65,6 +65,17 @@
   - 각 카테고리에 `cs.CV` / `cs.GR` / `cs.SD` arxiv prefix → `_collect_arxiv_categories` 자동 sweep
 - ✅ `seed_vfx.py` 에 `SEED_VFX_UPDATE=1` 옵션 — 기존 카테고리 keywords 도 merge 가능
 
+### 🧠 온톨로지 엔진 (Karpathy wiki tier — 2026-05-31)
+- ✅ Arca brand/family/base_model 자동 추출 (`262eb27`) — wiki tier 자동 태깅 첫 조각
+- ✅ Arca 자동 wiki 생성 (`e275bd3`) — `generate_wiki_draft` + on-demand API(`/items/{id}/generate-wiki`) + 야간배치 P0/P1 자동
+- ✅ wiki `[[link]]` → 그래프 엣지 (`dd5a3f6`) — `wiki_linker` (brand 매칭 → `LineageEdge("wiki_ref")`), LineageFlow 보라 점선 표시
+- ⏸ **raw tier** (ModelRawSnapshot 불변 원본) — 미구현
+- ⏸ **Lint** (stale 90일+/모순/고아/깨진 wikilink) — 미구현
+- ⏸ Compounding Loop (Query → wiki 자동 갱신) — 미구현
+
+> 온톨로지 3-tier: **wiki 🟢 (엔진 가동)** / raw ❌ / outputs 🟡 (reports 테이블 O, Arca 자동리포트 ❌=Phase 5)
+> 3 ops: **Ingest 🟢 (wiki 자동)** / Query ✅ (검색) / **Lint ❌**
+
 ---
 
 ## ⏭ 해야 할 일 (우선순위 순)
