@@ -159,8 +159,33 @@ robocopy backend\uploads M:\sota_files /E
 
 ## 7. 알려진 이슈 (활성 GitHub issues)
 
-- **#6** Gemma 파싱 실패 (max_tokens 부족) — `arca_brain.py` fix 적용됨. 5090 야간 배치 1회 돌려서 `Gemma usage:` 로그 확인 필요.
-- **#7** 크롤러 huggingface 만 동작 — 진단 로그 추가됨. 다음 야간 배치 또는 isolated 테스트로 확인.
+- **#6** Gemma 파싱 실패 (max_tokens 부족) — `arca_brain.py` fix 적용됨. 아래 진단 도구로 확인.
+- **#7** 크롤러 huggingface 만 동작 — 진단 로그 추가됨. 아래 진단 도구로 확인.
+
+### 🔍 진단 도구 — `diagnose.py` (#6/#7 검증용)
+
+5090 에서 한 줄 돌리고 **출력 전체를 복붙해서 공유**하면 진단 가능:
+
+```powershell
+cd backend; .\.venv\Scripts\activate
+
+# (1) 현재 DB 상태 스냅샷 — 안전·빠름, 크롤/LLM 안 함
+python diagnose.py
+#   → 소스별 item 수(#7), 최근 crawl 이력, 스코어링 상태(#6), brand/family
+
+# (2) 크롤 1회 실제 실행 + 소스별 결과 (#7 직접 재현)
+python diagnose.py --crawl
+#   → huggingface 외 0건/에러면 #7 재현. [arxiv] 등 진단 로그 같이 출력
+
+# (3) Gemma 스코어링 1회 + usage 로그 (#6, Ollama 필요)
+python diagnose.py --score
+#   → scored<total 이면 #6. 'Gemma usage:' completion vs max_tokens 확인
+
+# (4) 둘 다
+python diagnose.py --crawl --score
+```
+
+`--crawl`/`--score` 는 내부 진단 로그(`Gemma usage:`, `[arxiv] No cs.*` 등)도 stdout 에 같이 찍힘.
 
 ---
 
