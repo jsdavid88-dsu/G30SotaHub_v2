@@ -15,7 +15,19 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import sys
 from datetime import datetime, timedelta, timezone
+
+# Windows 5090 호환 (이슈 #19):
+# 1) 콘솔 cp949 → UTF-8 재설정 (em-dash/한글/이모지 출력 시 UnicodeEncodeError 방지)
+# 2) ProactorEventLoop → SelectorEventLoop (async postgres 드라이버 비호환 — run_server.py 와 동일 패턴)
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from sqlalchemy import func, select, text
 
