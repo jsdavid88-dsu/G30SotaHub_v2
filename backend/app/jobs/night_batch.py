@@ -342,6 +342,16 @@ async def step_run_grouper() -> dict:
         logger.exception("[night] family grouper failed")
         result = {**result, "family_error": str(e)}
 
+    # wiki [[link]] → 그래프 엣지 (wiki_ref) — Karpathy wiki=그래프
+    try:
+        from app.jobs.wiki_linker import build_wiki_links
+        wl = await build_wiki_links()
+        logger.info(f"[night] wiki_links: {wl}")
+        result = {**result, "wiki_ref_edges": wl.get("edges", 0)}
+    except Exception as e:
+        logger.exception("[night] wiki linker failed")
+        result = {**result, "wiki_link_error": str(e)}
+
     return {"step": "grouper", **result}
 
 

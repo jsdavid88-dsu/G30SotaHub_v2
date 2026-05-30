@@ -330,5 +330,13 @@ async def generate_item_wiki(
     item.confidence_status = ConfidenceStatus.unverified  # Arca 생성 → 사람 검토 전
     item.version = (item.version or 1) + 1
     await db.commit()
+
+    # wiki [[link]] → 그래프 엣지(wiki_ref) 즉시 갱신 (별도 세션)
+    try:
+        from app.jobs.wiki_linker import build_wiki_links
+        await build_wiki_links()
+    except Exception:
+        pass  # 그래프 갱신 실패해도 wiki 생성은 성공으로
+
     item = await _load_item(db, item_id)
     return serialize_item(item)

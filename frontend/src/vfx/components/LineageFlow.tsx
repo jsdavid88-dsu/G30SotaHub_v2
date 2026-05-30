@@ -76,9 +76,16 @@ export default function LineageFlow({ graph, height = 600 }: Props) {
     }));
 
     const e: Edge[] = graph.edges.map((edge, idx) => {
-      // same_family = Arca brand 추정 관계 → 초록 점선 + "계열" 라벨로 cites(인용)와 구분
-      const isFamily = edge.relationship_type === "same_family";
-      const color = isFamily ? "#10b981" : "#6366f1";
+      // 관계 타입별 시각 구분:
+      //  - cites/cited_by: 파란 실선 (인용 계보)
+      //  - same_family: 초록 점선 "계열" (Arca brand 추정)
+      //  - wiki_ref: 보라 점선 "참조" (wiki [[link]] 자동 연결)
+      const rel = edge.relationship_type;
+      const isFamily = rel === "same_family";
+      const isWiki = rel === "wiki_ref";
+      const color = isFamily ? "#10b981" : isWiki ? "#a855f7" : "#6366f1";
+      const dashed = isFamily || isWiki;
+      const label = isFamily ? "계열" : isWiki ? "참조" : undefined;
       return {
         id: `e${edge.parent_id}-${edge.child_id}-${idx}`,
         source: String(edge.parent_id),
@@ -86,13 +93,13 @@ export default function LineageFlow({ graph, height = 600 }: Props) {
         animated: false,
         style: {
           stroke: color,
-          strokeWidth: isFamily ? 1.5 : 1,
-          strokeDasharray: isFamily ? "5 4" : undefined,
+          strokeWidth: dashed ? 1.5 : 1,
+          strokeDasharray: dashed ? "5 4" : undefined,
         },
         markerEnd: { type: MarkerType.ArrowClosed, color },
-        label: isFamily ? "계열" : undefined,
-        labelStyle: isFamily ? { fill: "#059669", fontSize: 10, fontWeight: 600 } : undefined,
-        labelBgStyle: isFamily ? { fill: "#d1fae5" } : undefined,
+        label,
+        labelStyle: label ? { fill: color, fontSize: 10, fontWeight: 600 } : undefined,
+        labelBgStyle: isFamily ? { fill: "#d1fae5" } : isWiki ? { fill: "#f3e8ff" } : undefined,
       };
     });
 
