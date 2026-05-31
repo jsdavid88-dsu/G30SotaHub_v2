@@ -154,23 +154,42 @@ async def run_score() -> None:
     print("  '[arca] truncation recovery', 'Scoring: failed to parse' 줄 확인.")
 
 
+async def run_full() -> None:
+    """야간배치 전체(run_night_batch)를 1회 그대로 실행 — 실제 운영과 100% 동일.
+
+    crawl → submission → feed filter → score → wiki → grouper(+family/wiki_ref) → promotion
+    전부 Gemma 포함. #6/#7 을 운영과 똑같은 조건으로 한 번에 재현/검증.
+    """
+    _section("야간배치 전체 1회 (#6/#7 동시 — 운영과 100% 동일, 시간 오래)")
+    from app.jobs.night_batch import run_night_batch
+    out = await run_night_batch()
+    for r in out.get("results", []):
+        print(f"  {r}")
+    print("\n→ score step 의 scored<total = #6 / crawl step 의 source별 new = #7.")
+    print("  위 로그의 'Gemma usage:', 'failed to parse', '[arxiv] No cs.*' 줄 확인.")
+
+
 async def main() -> None:
     ap = argparse.ArgumentParser(description="#6/#7 진단 도구")
-    ap.add_argument("--crawl", action="store_true", help="크롤 1회 실제 실행")
-    ap.add_argument("--score", action="store_true", help="미스코어 항목 Gemma 스코어링 1회")
+    ap.add_argument("--crawl", action="store_true", help="크롤 1회 실제 실행 (#7)")
+    ap.add_argument("--score", action="store_true", help="미스코어 항목 Gemma 스코어링 1회 (#6, score 단계만)")
+    ap.add_argument("--full", action="store_true", help="야간배치 전체 1회 (운영과 동일 — crawl+score+wiki+grouper+promotion)")
     args = ap.parse_args()
 
-    if args.crawl or args.score:
+    if args.crawl or args.score or args.full:
         # 내부 진단 로그(arca/crawler)를 stdout 에 노출 → 복붙용
         logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
     print(f"\n진단 시각: {datetime.now(timezone.utc).isoformat()}")
     await snapshot()
-    if args.crawl:
-        await run_crawl()
-    if args.score:
-        await run_score()
-    if args.crawl or args.score:
+    if args.full:
+        await run_full()
+    else:
+        if args.crawl:
+            await run_crawl()
+        if args.score:
+            await run_score()
+    if args.crawl or args.score or args.full:
         print("\n── 재집계 (실행 후 상태) ──")
         await snapshot()
     print("\n완료. 이 출력 전체를 복붙해서 공유하면 진단 가능.")

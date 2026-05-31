@@ -183,6 +183,10 @@ python diagnose.py --score
 
 # (4) 둘 다
 python diagnose.py --crawl --score
+
+# (5) 야간배치 전체 1회 — 운영과 100% 동일 (crawl+score+wiki+grouper+promotion). 시간 오래.
+python diagnose.py --full
+#   → #6/#7 을 실제 야간배치와 똑같은 조건으로 한 번에 재현/검증
 ```
 
 `--crawl`/`--score` 는 내부 진단 로그(`Gemma usage:`, `[arxiv] No cs.*` 등)도 stdout 에 같이 찍힘.
