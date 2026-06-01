@@ -304,8 +304,11 @@ async def step_generate_wiki() -> dict:
             result = await loop.run_in_executor(None, lambda p=payload: generate_wiki_draft(p))
             if not result:
                 continue
-            if result.get("wiki_body"):
-                item.wiki_body = str(result["wiki_body"])
+            # #20: wiki_body 빈 문자열이면 skip (generated count 에서 제외)
+            wb = str(result.get("wiki_body") or "").strip()
+            if not wb:
+                continue
+            item.wiki_body = wb
             if result.get("description") and not item.description:
                 item.description = str(result["description"])[:500]
             md = dict(item.item_metadata or {})

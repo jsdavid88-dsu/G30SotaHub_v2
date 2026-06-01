@@ -73,15 +73,19 @@ async def build_wiki_links() -> dict:
                 if not target_id or target_id == it.id:
                     continue  # 매칭 없음(dangling) 또는 자기 자신
                 targets.add(target_id)
+            inserted_any = False
             for target_id in targets:
                 stmt = (
                     pg_insert(LineageEdge)
                     .values(parent_id=it.id, child_id=target_id, relationship_type=REL_WIKI_REF)
                     .on_conflict_do_nothing(index_elements=["parent_id", "child_id"])
                 )
-                await db.execute(stmt)
-                edges += 1
-            if targets:
+                res = await db.execute(stmt)
+                # #20: 실제 insert 된 것만 count (이미 cites/same_family 가 점유한 pair 는 conflict→0)
+                if res.rowcount and res.rowcount > 0:
+                    edges += 1
+                    inserted_any = True
+            if inserted_any:
                 linked_items += 1
 
         await db.commit()

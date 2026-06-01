@@ -313,8 +313,11 @@ async def generate_item_wiki(
     if not result:
         raise HTTPException(status_code=503, detail="Arca wiki 생성 실패 (Ollama/Gemma 연결 확인)")
 
-    if result.get("wiki_body"):
-        item.wiki_body = str(result["wiki_body"])
+    # #20: wiki_body 빈 문자열이면 생성 실패로 간주 (dict 는 왔지만 내용 없음)
+    wb = str(result.get("wiki_body") or "").strip()
+    if not wb:
+        raise HTTPException(status_code=503, detail="Arca 가 빈 wiki 를 반환 (재시도 필요)")
+    item.wiki_body = wb
     if result.get("description"):
         item.description = str(result["description"])[:500]
 

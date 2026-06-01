@@ -113,6 +113,8 @@ export default function ItemDetail() {
     try {
       await generateWiki(itemId);
       refetch();
+      // #20: wiki 생성 시 wiki_ref edge 가 갱신되므로 lineage 그래프도 invalidate
+      qc.invalidateQueries({ queryKey: ["lineage", "item", id] });
     } catch (e) {
       alert(`Arca wiki 생성 실패: ${e instanceof Error ? e.message : String(e)}\n(Ollama/Gemma 연결 확인)`);
     } finally {
