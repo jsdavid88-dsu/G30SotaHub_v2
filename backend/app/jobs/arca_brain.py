@@ -63,8 +63,10 @@ def normalize_brand(raw: object) -> str | None:
 def _call_gemma(system: str, user: str, temperature: float = 0.2, max_tokens: int = 4000) -> str:
     """Low-level Gemma call. Returns raw text response.
 
-    Issue #6 fix (2026-05-07): completion_tokens / reasoning 길이 로그 추가.
-    Gemma4 26B 가 thinking 모델이라 reasoning tokens 부터 소비 → max_tokens 부족 시 mid-stream truncation.
+    Issue #6 (2026-06-01, 5090 실측): gemma4:26b 는 thinking 모델이라 reasoning 이
+    completion 토큰을 전부 먹고 content_len=0 (JSON 0바이트)으로 반환 → batch 통째 유실
+    (모드 B). 구조화 JSON 출력엔 chain-of-thought 가 불필요하므로 thinking 자체를 끈다.
+    → `extra_body={"think": False}` (Ollama). completion 토큰 = 곧 JSON 토큰.
     """
     try:
         client = _get_client()
@@ -76,6 +78,7 @@ def _call_gemma(system: str, user: str, temperature: float = 0.2, max_tokens: in
             ],
             temperature=temperature,
             max_tokens=max_tokens,
+            extra_body={"think": False},  # Issue #6 P0: thinking off → content_len=0 구조적 차단
         )
         if not resp.choices:
             logger.warning(f"Gemma: no choices in response (max_tokens={max_tokens})")

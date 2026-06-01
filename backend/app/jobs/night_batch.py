@@ -225,11 +225,15 @@ async def step_score_items() -> dict:
                     break
                 item = batch[j]
 
-                score = result.get("relevancy_score", 0)
+                # Issue #6 P1: relevancy_score 없으면 저장 안 함 (모드 A 잔재의 reason-만-있는
+                # 쓰레기 방지). llm_score=0 유지 → 다음 야간배치에서 재시도 대상.
+                raw_score = result.get("relevancy_score")
+                if raw_score is None or raw_score == "":
+                    continue
                 try:
-                    score = max(0, min(10, int(score)))
+                    score = max(0, min(10, int(raw_score)))
                 except (TypeError, ValueError):
-                    score = 0
+                    continue
 
                 item.llm_score = score
                 item.priority = result.get("priority", "WATCH")
