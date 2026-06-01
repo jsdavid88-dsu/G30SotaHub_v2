@@ -60,13 +60,17 @@ def normalize_brand(raw: object) -> str | None:
     return b
 
 
-def _call_gemma(system: str, user: str, temperature: float = 0.2, max_tokens: int = 4000) -> str:
+def _call_gemma(
+    system: str, user: str, temperature: float = 0.2, max_tokens: int = 4000, think: bool = False
+) -> str:
     """Low-level Gemma call. Returns raw text response.
 
     Issue #6 (2026-06-01, 5090 실측): gemma4:26b 는 thinking 모델이라 reasoning 이
     completion 토큰을 전부 먹고 content_len=0 (JSON 0바이트)으로 반환 → batch 통째 유실
-    (모드 B). 구조화 JSON 출력엔 chain-of-thought 가 불필요하므로 thinking 자체를 끈다.
-    → `extra_body={"think": False}` (Ollama). completion 토큰 = 곧 JSON 토큰.
+    (모드 B). 구조화·짧은 JSON 출력(filter/score/promote)엔 CoT 가 불필요 + 위험하므로 기본 off.
+
+    think=True 는 긴 분석 생성(wiki)에서 품질을 위해 켤 때만 — 단 content_len=0 위험이
+    있으므로 호출처가 폴백(think=False 재시도)을 둘 것.
     """
     try:
         client = _get_client()
@@ -78,7 +82,7 @@ def _call_gemma(system: str, user: str, temperature: float = 0.2, max_tokens: in
             ],
             temperature=temperature,
             max_tokens=max_tokens,
-            extra_body={"think": False},  # Issue #6 P0: thinking off → content_len=0 구조적 차단
+            extra_body={"think": think},  # Issue #6: 기본 off (구조화 출력). wiki 만 True+폴백.
         )
         if not resp.choices:
             logger.warning(f"Gemma: no choices in response (max_tokens={max_tokens})")
@@ -358,16 +362,22 @@ def generate_wiki_draft(item: dict) -> dict | None:
     """모델 1개의 wiki 초안 생성. {description, wiki_body, wikilinks} 또는 None.
 
     item: {title, source, abstract}. Ollama 미연결/파싱 실패 시 None (graceful).
+
+    품질을 위해 thinking 을 켜고 시도(긴 분석 생성), content_len=0(thinking overflow)으로
+    파싱 실패하면 thinking off 로 1회 폴백 → 품질 우선 + 안정성 보장.
     """
     user = (
         f"제목: {item.get('title', '?')}\n"
         f"소스: {item.get('source', '?')}\n"
         f"내용:\n{(item.get('abstract') or '')[:2000]}"
     )
-    raw = _call_gemma(WIKI_SYSTEM, user, temperature=0.3, max_tokens=2500)
-    parsed = _parse_json(raw)
-    if not isinstance(parsed, dict):
-        snippet = raw[:400].replace("\n", "\\n") if raw else "<empty>"
-        logger.warning(f"Wiki 생성 파싱 실패: {snippet!r}")
-        return None
-    return parsed
+    # (think, max_tokens): thinking 켜면 reasoning 여유분 크게, 폴백은 off + 작게
+    for think, mt in ((True, 4000), (False, 2500)):
+        raw = _call_gemma(WIKI_SYSTEM, user, temperature=0.3, max_tokens=mt, think=think)
+        parsed = _parse_json(raw)
+        if isinstance(parsed, dict):
+            return parsed
+        snippet = raw[:300].replace("\n", "\\n") if raw else "<empty>"
+        logger.warning(f"Wiki 생성 파싱 실패 (think={think}): {snippet!r}"
+                       + (" — thinking off 로 폴백" if think else " — 최종 실패"))
+    return None
