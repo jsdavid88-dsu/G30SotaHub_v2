@@ -115,3 +115,23 @@ export async function deleteCategory(slug: string) {
     throw new Error(`API ${res.status}: ${await res.text()}`);
   }
 }
+
+// === Arca 운영자 커스텀 지침 (admin / professor) ===
+
+export type ArcaSettings = { custom_instructions: string | null; updated_at: string | null };
+
+export async function getArcaSettings(): Promise<ArcaSettings> {
+  const res = await fetch(`${API_URL}/api/v1/vfx/admin/arca-settings`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+export async function putArcaSettings(custom_instructions: string | null): Promise<ArcaSettings> {
+  const res = await fetch(`${API_URL}/api/v1/vfx/admin/arca-settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ custom_instructions }),
+  });
+  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  return res.json();
+}

@@ -7,6 +7,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel
 from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -131,6 +132,50 @@ async def score_update(
         count += 1
     await db.commit()
     return ScoreUpdateResult(updated=count)
+
+
+# ── Arca 운영자 커스텀 지침 (B — 프롬프트 추가 지침) ─────────────
+
+class ArcaSettingRead(BaseModel):
+    custom_instructions: str | None = None
+    updated_at: str | None = None
+
+
+class ArcaSettingUpdate(BaseModel):
+    custom_instructions: str | None = None
+
+
+@router.get("/arca-settings", response_model=ArcaSettingRead)
+async def get_arca_settings(
+    _: None = Depends(verify_admin_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """Arca 운영자 커스텀 지침 조회 (admin/professor 또는 worker token)."""
+    from app.services.arca_settings import get_or_create_setting
+    s = await get_or_create_setting(db)
+    return ArcaSettingRead(
+        custom_instructions=s.custom_instructions,
+        updated_at=s.updated_at.isoformat() if s.updated_at else None,
+    )
+
+
+@router.put("/arca-settings", response_model=ArcaSettingRead)
+async def put_arca_settings(
+    payload: ArcaSettingUpdate,
+    _: None = Depends(verify_admin_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """Arca 커스텀 지침 저장. score/wiki 프롬프트에 '## 운영자 추가 지침' 으로 append.
+    프롬프트 골격(JSON 스키마)은 코드 고정 — 여기선 자연어 지침만."""
+    from app.services.arca_settings import get_or_create_setting
+    s = await get_or_create_setting(db)
+    s.custom_instructions = (payload.custom_instructions or "").strip() or None
+    await db.commit()
+    await db.refresh(s)
+    return ArcaSettingRead(
+        custom_instructions=s.custom_instructions,
+        updated_at=s.updated_at.isoformat() if s.updated_at else None,
+    )
 
 
 async def _wrap_run(action: str, label: str, fn, *args):

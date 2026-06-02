@@ -19,6 +19,7 @@ import ItemCard from "../components/ItemCard";
 import ItemTable from "../components/ItemTable";
 import ViewToggle from "../components/ViewToggle";
 import AssignModal, { type AssignModalState } from "../components/AssignModal";
+import ArcaSettingsPanel from "../components/ArcaSettingsPanel";
 import { useViewMode } from "../utils/viewMode";
 import { dedup } from "../utils/dedup";
 
@@ -356,6 +357,9 @@ export default function Dashboard() {
           <AdminToolbar />
         </div>
       </div>
+
+      {/* Arca 운영자 지침 (admin/professor 만 — self-gate) */}
+      <ArcaSettingsPanel />
 
       {/* 통계 카드 */}
       <div style={{

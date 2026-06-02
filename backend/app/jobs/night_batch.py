@@ -193,12 +193,15 @@ async def step_score_items() -> dict:
 
     scored = 0
 
+    from app.services.arca_settings import get_custom_instructions
+
     async with SessionLocal() as db:
         # 카테고리 목록을 DB 에서 읽어 Gemma 프롬프트에 주입 (하드코딩 제거 — 신규 카테고리 자동 반영)
         cat_rows = (await db.execute(
             select(Category.slug, Category.name_ko).order_by(Category.display_order)
         )).all()
         categories = [{"slug": s, "name_ko": n} for s, n in cat_rows]
+        extra = await get_custom_instructions(db)  # 운영자 커스텀 지침
 
         stmt = select(Item).where(Item.llm_score == 0).order_by(
             Item.discovered_at.desc()
@@ -217,7 +220,7 @@ async def step_score_items() -> dict:
             ]
 
             results = await asyncio.get_running_loop().run_in_executor(
-                None, lambda b=batch_dicts: score_items(b, categories)
+                None, lambda b=batch_dicts: score_items(b, categories, extra)
             )
 
             for j, result in enumerate(results):
@@ -281,10 +284,12 @@ WIKI_BATCH_LIMIT = 5
 
 async def step_generate_wiki() -> dict:
     """고득점(P0/P1) + wiki 없는 모델에 Arca wiki 초안 자동 생성."""
-    from app.jobs.arca_brain import generate_wiki_draft, normalize_brand
+    from app.jobs.arca_brain import generate_wiki_draft
+    from app.services.arca_settings import get_custom_instructions
 
     generated = 0
     async with SessionLocal() as db:
+        extra = await get_custom_instructions(db)  # 운영자 커스텀 지침
         stmt = (
             select(Item)
             .where(
@@ -301,7 +306,7 @@ async def step_generate_wiki() -> dict:
         loop = asyncio.get_running_loop()
         for item in items:
             payload = {"title": item.title, "source": item.source, "abstract": item.abstract}
-            result = await loop.run_in_executor(None, lambda p=payload: generate_wiki_draft(p))
+            result = await loop.run_in_executor(None, lambda p=payload: generate_wiki_draft(p, extra))
             if not result:
                 continue
             # #20: wiki_body 빈 문자열이면 skip (generated count 에서 제외)

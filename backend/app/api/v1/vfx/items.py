@@ -303,12 +303,14 @@ async def generate_item_wiki(
     """
     item = await _load_item(db, item_id)
     from app.jobs.arca_brain import generate_wiki_draft
+    from app.services.arca_settings import get_custom_instructions
 
+    extra = await get_custom_instructions(db)  # 운영자 커스텀 지침
     result = await asyncio.get_running_loop().run_in_executor(
         None,
         lambda: generate_wiki_draft({
             "title": item.title, "source": item.source, "abstract": item.abstract,
-        }),
+        }, extra),
     )
     if not result:
         raise HTTPException(status_code=503, detail="Arca wiki 생성 실패 (Ollama/Gemma 연결 확인)")

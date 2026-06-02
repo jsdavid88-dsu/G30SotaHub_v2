@@ -249,7 +249,14 @@ JSON 배열만 출력. 마크다운 금지.
 """
 
 
-def _build_score_system(categories: list[dict] | None) -> str:
+def _append_instructions(system: str, extra: str | None) -> str:
+    """운영자 커스텀 지침(자연어)을 프롬프트 끝에 append. 골격(JSON 스키마)은 불변."""
+    if extra and extra.strip():
+        return system + "\n\n## 운영자 추가 지침 (반드시 우선 반영)\n" + extra.strip()
+    return system
+
+
+def _build_score_system(categories: list[dict] | None, extra_instructions: str | None = None) -> str:
     """카테고리 목록을 프롬프트에 주입. categories=[{slug, name_ko}]."""
     if categories:
         lines = []
@@ -261,19 +268,23 @@ def _build_score_system(categories: list[dict] | None) -> str:
         category_list = "\n".join(lines) if lines else "(카테고리 미지정 — best fit slug)"
     else:
         category_list = "(카테고리 목록 없음 — 가장 적합한 영문 slug 자유 작성)"
-    return SCORE_SYSTEM_TEMPLATE.format(category_list=category_list)
+    system = SCORE_SYSTEM_TEMPLATE.format(category_list=category_list)
+    return _append_instructions(system, extra_instructions)
 
 
-def score_items(items: list[dict], categories: list[dict] | None = None) -> list[dict]:
+def score_items(
+    items: list[dict], categories: list[dict] | None = None, extra_instructions: str | None = None
+) -> list[dict]:
     """Score items with Gemma4. Returns list of scoring results.
 
     categories: [{slug, name_ko}] — DB 에서 주입. 하드코딩 대신 런타임 목록 사용.
+    extra_instructions: 운영자 커스텀 지침 (ArcaSetting) — 프롬프트 끝에 append.
     결과에 brand/family/base_model/modality 포함 (모델 계열 자동 태깅 — 검색·승격 연동).
     """
     if not items:
         return []
 
-    system = _build_score_system(categories)
+    system = _build_score_system(categories, extra_instructions)
 
     parts = [f"아래 {len(items)}개 아이템을 분석해줘.\n"]
     for i, item in enumerate(items, 1):
@@ -358,10 +369,11 @@ wiki_body 규칙:
 JSON만 출력. 마크다운 코드펜스 금지."""
 
 
-def generate_wiki_draft(item: dict) -> dict | None:
+def generate_wiki_draft(item: dict, extra_instructions: str | None = None) -> dict | None:
     """모델 1개의 wiki 초안 생성. {description, wiki_body, wikilinks} 또는 None.
 
-    item: {title, source, abstract}. Ollama 미연결/파싱 실패 시 None (graceful).
+    item: {title, source, abstract}. extra_instructions: 운영자 커스텀 지침.
+    Ollama 미연결/파싱 실패 시 None (graceful).
 
     품질을 위해 thinking 을 켜고 시도(긴 분석 생성), content_len=0(thinking overflow)으로
     파싱 실패하면 thinking off 로 1회 폴백 → 품질 우선 + 안정성 보장.
@@ -371,9 +383,10 @@ def generate_wiki_draft(item: dict) -> dict | None:
         f"소스: {item.get('source', '?')}\n"
         f"내용:\n{(item.get('abstract') or '')[:2000]}"
     )
+    system = _append_instructions(WIKI_SYSTEM, extra_instructions)
     # (think, max_tokens): thinking 켜면 reasoning 여유분 크게, 폴백은 off + 작게
     for think, mt in ((True, 4000), (False, 2500)):
-        raw = _call_gemma(WIKI_SYSTEM, user, temperature=0.3, max_tokens=mt, think=think)
+        raw = _call_gemma(system, user, temperature=0.3, max_tokens=mt, think=think)
         parsed = _parse_json(raw)
         if isinstance(parsed, dict):
             return parsed

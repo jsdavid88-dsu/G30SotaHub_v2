@@ -30,6 +30,7 @@ from app.models.vfx_crawl_run import CrawlRun
 from app.models.vfx_feed_item import FeedItem
 from app.models.vfx_submission import Submission
 from app.models.vfx_category_suggestion import CategorySuggestion
+from app.models.vfx_arca_setting import ArcaSetting
 
 __all__ = [
     "Base",
@@ -80,4 +81,5 @@ __all__ = [
     "FeedItem",
     "Submission",
     "CategorySuggestion",
+    "ArcaSetting",
 ]

@@ -24,4 +24,5 @@ async function _request<T>(method: string, path: string, body?: unknown): Promis
 export const apiGet = <T>(path: string) => _request<T>("GET", path);
 export const apiPost = <T>(path: string, body: unknown) => _request<T>("POST", path, body);
 export const apiPatch = <T>(path: string, body: unknown) => _request<T>("PATCH", path, body);
+export const apiPut = <T>(path: string, body: unknown) => _request<T>("PUT", path, body);
 export const apiDelete = <T>(path: string) => _request<T>("DELETE", path);
