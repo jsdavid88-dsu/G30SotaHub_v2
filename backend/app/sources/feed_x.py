@@ -1,7 +1,8 @@
 # X/Twitter feed — Playwright with saved login session.
 # No API key, no fxtwitter. Direct browser scraping with persistent auth.
 #
-# Setup: run scripts/x_login_setup.py once to save login session.
+# Setup: run `python login_helper.py` once to save login session
+#        (X·Reddit·아카 공용 프로필 — backend/data/x_browser_profile).
 from __future__ import annotations
 
 import asyncio
