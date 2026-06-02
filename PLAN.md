@@ -12,6 +12,59 @@
 
 ---
 
+## 🧭 컴팩션 재진입 — 현재 상태 (2026-06-02, 커밋 `59f9208`)
+
+> 이 블록만 봐도 현재 위치·다음 파악 가능. 상세는 아래 섹션들.
+
+**한 줄**: 연구실 협업(Hub) + 자동 SOTA 추적(VFX/Arca) 통합 R&D Knowledge Graph. Phase 0~2 완료, 온톨로지 wiki tier 가동, Phase 3(그래프 UI) 직전.
+
+### GitHub 이슈 상태
+- ✅ **CLOSED**: #6(Gemma 파싱→thinking off, 5090 검증 scored130/unscored0) · #14 · #15 · #16 · #17 · #18 · #19 · #20
+- 🟡 **OPEN #7** (크롤러): 코드 다 고침(github 공식API→연산자≤5, arxiv 429 스킵, HTTP 재시도래퍼, feed yaml). **5090 `diagnose.ps1 --crawl` 재검증만 남음** → github/arxiv `new>0` 이면 close
+- 🟡 **OPEN #9**(배포 alembic 안내) · **#11**(Arca→Hermes/LDR, 3개월 보류) · **#21**(운영 제약 가이드 — env.py만 코드, 나머지 인지)
+
+### 5090 운영 액션 (git pull 후 — 필수)
+1. `git pull` (59f9208)
+2. `cd backend; .\.venv\Scripts\activate; alembic upgrade head` — **미적용 마이그레이션 j0a1(annotations)·k0a1(fps/web_relpath)·l0a1(arca_settings)**. env.py Windows 정책 적용돼 이제 직접 됨
+3. `python seed_vfx.py` — arxiv cs.* 카테고리 (#7)
+4. `.env`: `REDDIT_CLIENT_ID/SECRET`(reddit) + `GITHUB_TOKEN`(rate)
+5. `copy backend\feed_queries.example.yaml backend\feed_queries.yaml` — feed 쓸 때 (hf/pwc 즉시 동작)
+6. `npm --prefix frontend ci` (lockfile #16)
+7. `.\diagnose.ps1 --crawl` (또는 `--full`) → 결과 공유
+
+### 이번 세션(2026-06-02) 한 것
+- 코드리뷰 #14~20 전부 처리/close
+- Arca 강화: brand/family/base_model 자동추출(`262eb27`) + 카테고리 DB 동적주입
+- Family grouper(`df8125c`) same_family edge
+- 이미지 annotation(`39dfc95`) + 영상 annotation·타임코드(`d055104`) + 트랜스코딩·프레임정밀(`1b3cfa8`)
+- 보안: attachment/annotation owner 권한 deny-by-default(`a5b7a2d`/`16d8bba`/`d70f8d8`)
+- 진단도구 `diagnose.py`(`e7c46b3`) + Windows fix(`9891625`) + `--full`(`696d6a2`)
+- **온톨로지 엔진**: Arca 자동 wiki(`e275bd3`) + wiki `[[link]]`→그래프엣지 wiki_linker(`dd5a3f6`)
+- #6 thinking off 근본해결(`3e880cf`/`67642e1`) — 5090 검증 완료(close)
+- **관리 UI**: 카테고리 검색키워드 편집(`796f55e`) + Arca 커스텀지침(`751b211`)
+- #7 크롤 fix: github 공식API·연산자≤5 / arxiv 429 / HTTP 재시도(`4cc6b8e`/`0bcf753`/`59f9208`)
+
+### 다음 할 일 (검증과 독립 진행 가능)
+- 🟢 **온톨로지 마저**: raw tier(ModelRawSnapshot 불변원본) + Lint(stale/모순/고아) — 3-tier·3-ops 완성
+- 🟢 **GraphNode/GraphEdge → Phase 3 그래프 UI** (reactflow 본격)
+- 🟢 Phase 4 모터헤드 / Phase 5 Arca 주간리포트 / Phase 6 정리
+
+### 운영 제약 (#21 — dev 항상 전제)
+- **Windows**(Docker 아님). async CLI 는 win32 `SelectorEventLoopPolicy` 필요 (env.py/run_server/diagnose 적용됨)
+- **migration 포함 커밋**은 메시지에 명시 + 5090 `alembic upgrade head` 필요 (미적용 시 500, #9 함정)
+- **arxiv 429 / github rate**(GITHUB_TOKEN), DNS 블립은 재시도 / 4xx 는 구분 처리
+- **GPU**: `nvidia-smi -pl 400` 캡. night_batch 동시성·배치폭 키우면 사전 이슈+전력 재검증 (현재 SCORE_BATCH=3, wiki 1회 5개 보수적)
+
+### 관리 UI (이번 세션 신규 — 운영자가 코드 재배포 없이)
+- 카테고리 상세(`/vfx/category/:slug`): admin/professor → 검색 키워드 5그룹 편집 → 다음 크롤 sweep
+- VFX 대시보드: admin/professor → "Arca 지침"(자연어) → score/wiki 프롬프트에 append (골격 JSON 스키마는 코드 고정)
+
+### 온톨로지 3-tier / 3-ops 현황
+- wiki 🟢 가동 (Arca 자동생성 + [[link]] 그래프화) / raw ❌(미구현) / outputs 🟡(reports 테이블 O, Arca 주간리포트=Phase5)
+- Ingest 🟢(wiki 자동) / Query ✅(검색) / **Lint ❌**(미구현)
+
+---
+
 ## ✅ 완료 (큰 단위)
 
 ### Phase 0 — 부트스트랩
