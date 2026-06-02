@@ -12,25 +12,42 @@
 
 ---
 
-## 🧭 컴팩션 재진입 — 현재 상태 (2026-06-02, 커밋 `59f9208`)
+## 🧭 컴팩션 재진입 — 현재 상태 (2026-06-02, HEAD `c4b5e62`)
 
 > 이 블록만 봐도 현재 위치·다음 파악 가능. 상세는 아래 섹션들.
 
 **한 줄**: 연구실 협업(Hub) + 자동 SOTA 추적(VFX/Arca) 통합 R&D Knowledge Graph. Phase 0~2 완료, 온톨로지 wiki tier 가동, Phase 3(그래프 UI) 직전.
 
 ### GitHub 이슈 상태
-- ✅ **CLOSED**: #6(Gemma 파싱→thinking off, 5090 검증 scored130/unscored0) · #14 · #15 · #16 · #17 · #18 · #19 · #20
-- 🟡 **OPEN #7** (크롤러): 코드 다 고침(github 공식API→연산자≤5, arxiv 429 스킵, HTTP 재시도래퍼, feed yaml). **5090 `diagnose.ps1 --crawl` 재검증만 남음** → github/arxiv `new>0` 이면 close
-- 🟡 **OPEN #9**(배포 alembic 안내) · **#11**(Arca→Hermes/LDR, 3개월 보류) · **#21**(운영 제약 가이드 — env.py만 코드, 나머지 인지)
+- ✅ **CLOSED**: #6 · #14~#20 · **#22**(`2ad809b`: Category PATCH null→422 / Arca 지침 JSON가드(#6 회귀방지) / github topics 폴백) · **#23**(`349e1a5`: crawler 공백 sanitize + Category trim/dedupe)
+- 🟡 **OPEN #7**: github/arxiv 는 5090서 0→87 / 0→14 확인됨. feed 러너 가드 버그(hf_trending·pwc 빈 dict 막던 것) `349e1a5` 로 수정. 잔여=코드 아님(reddit 키·feed yaml). `diagnose.ps1 --full` 로 hf_trending·pwc `0→N` 재확인 후 close 판단
+- 🟡 **OPEN #9**(배포 alembic) · **#11**(Arca→Hermes/LDR 보류) · **#21**(운영 제약)
 
-### 5090 운영 액션 (git pull 후 — 필수)
-1. `git pull` (59f9208)
-2. `cd backend; .\.venv\Scripts\activate; alembic upgrade head` — **미적용 마이그레이션 j0a1(annotations)·k0a1(fps/web_relpath)·l0a1(arca_settings)**. env.py Windows 정책 적용돼 이제 직접 됨
-3. `python seed_vfx.py` — arxiv cs.* 카테고리 (#7)
-4. `.env`: `REDDIT_CLIENT_ID/SECRET`(reddit) + `GITHUB_TOKEN`(rate)
-5. `copy backend\feed_queries.example.yaml backend\feed_queries.yaml` — feed 쓸 때 (hf/pwc 즉시 동작)
-6. `npm --prefix frontend ci` (lockfile #16)
-7. `.\diagnose.ps1 --crawl` (또는 `--full`) → 결과 공유
+### 🤖 5090 Claude 인계 — 신규: 커뮤니티 스크래퍼 (아카/X 자율수집)
+**무엇**: Reddit/X/아카라이브를 night_batch 자율 소스로 편입. 크롤만 들어오면 기존 Gemma4(filter→score→wiki)가 자동 처리.
+**구조**:
+- `backend/login_helper.py` (신규, 사람이 5090서 1회 실행): 브라우저 창 → X(버너)/Reddit/아카 로그인 → 세션이 `backend/data/x_browser_profile/`(gitignore)에 저장. **인증벽 때문에 이 로그인만 수동, 이후 자율.**
+- `backend/app/sources/_browser_session.py` (신규): `PROFILE_DIR` + `run_browser_coro()`. Playwright 를 **전용 스레드 + ProactorEventLoop** 로 실행. 앱 전역은 psycopg 때문에 SelectorEventLoop → 이 격리 없으면 Windows 서 브라우저 크롤이 `NotImplementedError` 로 죽음 (X 가 0건이던 잠재원인).
+- `backend/app/sources/feed_arca.py` (신규): `arca.live/b/{slug}` 글목록 → FeedItem. 로그인 프로필로 Cloudflare 통과.
+- `feed_x.py`(기존 X 스크래퍼): 자체 asyncio.run → `run_browser_coro` 교체.
+- `feed_crawler.py`: `_run_arca` + FEED_SOURCES 등록 → `crawl_feed_all` → night_batch 자동.
+- 설정: `feed_queries.yaml` 의 `arca.channels` / `x_accounts` (코드 하드코딩 없음).
+
+**검증 (5090)**: ① `python login_helper.py` 로그인 ② `feed_queries.yaml` 채널/핸들 채움 ③ `diagnose.ps1 --full` 로그 확인:
+- `[arca] /b/{slug}: N posts` — N>0 성공. **0 + "글 행 0개" 경고**면 → `feed_arca.py` 의 `_ROW_SELECTORS`/`_TITLE_SELECTORS` 조정 (로그인/CF 통과부터 확인).
+- 브라우저 소스가 `NotImplementedError`/subprocess 에러 없이 도는지 (이벤트루프 격리 검증).
+
+**리스크**: ⚠️ 아카 DOM 선택자 **미검증(추정)** — 0건이면 1순위 조정. ⚠️ 프로필 락(login 창 닫고 크롤; feed 소스는 순차라 X↔아카 동시충돌 없음). ⚠️ X 는 버너 계정만(실계정 밴).
+
+### 5090 운영 액션 (git pull 후 — 누적)
+1. `git pull` (HEAD `c4b5e62`)
+2. `cd backend; .\.venv\Scripts\activate; alembic upgrade head` — 미적용 j0a1·k0a1·l0a1 있으면
+3. `python seed_vfx.py` — arxiv cs.* 카테고리
+4. `.env`: `REDDIT_CLIENT_ID/SECRET` + `GITHUB_TOKEN`
+5. `copy backend\feed_queries.example.yaml backend\feed_queries.yaml` 후 arca/x/reddit 채움
+6. `python login_helper.py` — X(버너)/Reddit/아카 로그인 (위 인계 참조)
+7. `npm --prefix frontend ci` (lockfile)
+8. `.\diagnose.ps1 --full` → 결과 공유
 
 ### 이번 세션(2026-06-02) 한 것
 - 코드리뷰 #14~20 전부 처리/close
@@ -43,6 +60,8 @@
 - #6 thinking off 근본해결(`3e880cf`/`67642e1`) — 5090 검증 완료(close)
 - **관리 UI**: 카테고리 검색키워드 편집(`796f55e`) + Arca 커스텀지침(`751b211`)
 - #7 크롤 fix: github 공식API·연산자≤5 / arxiv 429 / HTTP 재시도(`4cc6b8e`/`0bcf753`/`59f9208`)
+- #22(`2ad809b`) + #23(`349e1a5`): CategoryUpdate null→422 / Arca 지침 JSON가드 / github topics·공백 sanitize / Category trim·dedupe / #7 feed 가드(hf·pwc 빈dict 허용)
+- **커뮤니티 스크래퍼**: login_helper(`c62cadd`) + feed_arca·_browser_session 이벤트루프격리(`c4b5e62`) — 아카/X 를 night_batch 자율수집에 편입
 
 ### 다음 할 일 (검증과 독립 진행 가능)
 - 🟢 **온톨로지 마저**: raw tier(ModelRawSnapshot 불변원본) + Lint(stale/모순/고아) — 3-tier·3-ops 완성
@@ -50,7 +69,7 @@
 - 🟢 Phase 4 모터헤드 / Phase 5 Arca 주간리포트 / Phase 6 정리
 
 ### 운영 제약 (#21 — dev 항상 전제)
-- **Windows**(Docker 아님). async CLI 는 win32 `SelectorEventLoopPolicy` 필요 (env.py/run_server/diagnose 적용됨)
+- **Windows**(Docker 아님). async CLI 는 win32 `SelectorEventLoopPolicy` 필요 (env.py/run_server/diagnose 적용됨). 단 **Playwright 소스(feed_x/feed_arca)는 ProactorEventLoop** 필요 → `_browser_session.run_browser_coro` 가 전용 스레드로 격리
 - **migration 포함 커밋**은 메시지에 명시 + 5090 `alembic upgrade head` 필요 (미적용 시 500, #9 함정)
 - **arxiv 429 / github rate**(GITHUB_TOKEN), DNS 블립은 재시도 / 4xx 는 구분 처리
 - **GPU**: `nvidia-smi -pl 400` 캡. night_batch 동시성·배치폭 키우면 사전 이슈+전력 재검증 (현재 SCORE_BATCH=3, wiki 1회 5개 보수적)
