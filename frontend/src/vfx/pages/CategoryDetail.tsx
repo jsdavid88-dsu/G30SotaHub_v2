@@ -9,6 +9,7 @@ import ItemTable, { type SortKey as TableSortKey, type SortDir } from "../compon
 import FilterPanel from "../components/FilterPanel";
 import ViewToggle from "../components/ViewToggle";
 import AssignModal, { type AssignModalState } from "../components/AssignModal";
+import CategoryKeywordsEditor from "../components/CategoryKeywordsEditor";
 import { useViewMode } from "../utils/viewMode";
 import { dedup } from "../utils/dedup";
 import { cardStyle, sectionHeaderStyle, sectionTitleStyle, badgeStyle, btnGhost } from "../design";
@@ -152,6 +153,11 @@ export default function CategoryDetail() {
           </div>
         )}
       </div>
+
+      <CategoryKeywordsEditor
+        category={category}
+        onSaved={() => qc.invalidateQueries({ queryKey: ["category", slug] })}
+      />
 
       <div style={{ marginBottom: 16 }}>
         <FilterPanel filters={filters} onChange={setFilters} />

@@ -10,7 +10,7 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import Category, Item, ItemCategory
 from app.models.user import User, UserRole
-from app.schemas.vfx.category import CategoryCreate, CategoryRead
+from app.schemas.vfx.category import CategoryCreate, CategoryRead, CategoryUpdate
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
@@ -107,6 +107,33 @@ async def create_category(
     await db.commit()
     await db.refresh(cat)
     return _to_read(cat, 0, 0)
+
+
+@router.patch("/{slug}", response_model=CategoryRead)
+async def update_category(
+    slug: str,
+    payload: CategoryUpdate,
+    user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db),
+):
+    """카테고리 편집 — admin / professor 만. 검색 키워드(keywords/github_topics/hf_tags/
+    subreddits/x_accounts) + 이름/설명/순서 부분 업데이트. 다음 야간배치가 갱신된 키워드로 sweep."""
+    _require_admin_or_professor(user)
+
+    result = await db.execute(select(Category).where(Category.slug == slug))
+    cat = result.scalar_one_or_none()
+    if not cat:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    data = payload.model_dump(exclude_unset=True)
+    for field, value in data.items():
+        if hasattr(cat, field):
+            setattr(cat, field, value)
+    await db.commit()
+    await db.refresh(cat)
+
+    total, new_count = await _category_stats(db, cat.id)
+    return _to_read(cat, total, new_count)
 
 
 @router.delete("/{slug}", status_code=204)
