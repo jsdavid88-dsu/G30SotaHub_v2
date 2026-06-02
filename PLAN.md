@@ -131,23 +131,37 @@
 
 ---
 
-## 🔄 진행 중 / 검증 대기
+## 🔄 진행 중 / 검증 대기 (2026-06-01 갱신)
 
-### GitHub 이슈 (OPEN)
-| # | 제목 | 상태 |
+### 코드 리뷰 이슈 — 처리 완료 (close)
+| # | 내용 | 커밋 |
 |---|------|------|
-| **#6** | Gemma 파싱 실패 | fix push 됨, 5090 야간 배치 1회 돌려서 `Gemma usage:` 로그 확인 필요 |
-| **#7** | 크롤러 huggingface 만 동작 | 진단 로그 push 됨. 5090 야간 배치 후 어떤 패턴 떨어지는지 확인 필요. **카테고리 9개 추가로 일부 보완** — 새 카테고리들이 검색 sweep 함 |
-| **#9** | Phase 1 migration 안내 | start.ps1 alembic 검증 prompt 동작 확인 후 close |
-| **#11** | Arca → Hermes/LDR | **3개월 후 재평가 권장** (지금은 Arca 안정화 우선) |
+| #14 | 메시징 Depends() 버그 (부팅 다운) | `b24dd21` |
+| #15 | SOTA/VFX 통합 후속 P1~P3 8건 | `44ee5e8`/`da1d56d` |
+| #16 | 빌드 차단 + standalone auth 제거 | `e46f0e6` |
+| #17 | Vite 번들 경고 (986→264kB) | `c8b9bd4` |
+| #18 | attachment/annotation 권한 경계 (재오픈까지) | `a5b7a2d`/`16d8bba`/`d70f8d8` |
+| #19 | diagnose.py Windows 실행 불가 | `9891625` |
+| #20 | wiki tier 정합성 | `34921ee` |
 
-### 5090 운영 액션
-1. `git pull` — 최신 `811a141` 까지
-2. `winget install ffmpeg` — Phase 2.5 A 영상 썸네일용
-3. `cd backend; .\.venv\Scripts\activate; alembic upgrade head` — Phase 2 메시지 보드 + Phase 2.5 A 첨부 마이그레이션 적용
-4. `python seed_vfx.py` — 카테고리 9개 신규 추가 (기존 보강 원하면 `$env:SEED_VFX_UPDATE='1'`)
-5. `.\start.ps1` 또는 백엔드 재시작
-6. 야간 배치 한 번 → 진단 로그 확인 (이슈 #6/#7)
+### OPEN — 5090 실측 검증 대기 (검증 돌리는 중)
+| # | 내용 | 상태 |
+|---|------|------|
+| **#6** | Gemma 파싱 실패 | **thinking off(용도별) + score 필드검증 + wiki thinking폴백** (`3e880cf`/`67642e1`). `.\diagnose.ps1 --full` → `content_len>0` + `scored==total` 확인 후 close |
+| **#7** | 크롤러 hf만 동작 | **github 공식 API 교체**(`4cc6b8e`) ✅코드 / arxiv=`seed_vfx.py` 재실행 / reddit=`.env` / x=Phase3 보류 |
+| **#9** | migration 안내 | start.ps1 alembic prompt 동작 확인 후 close |
+| **#11** | Arca → Hermes/LDR | 3개월 후 재평가 (보류) |
+
+### 5090 운영 액션 (git pull `4cc6b8e` 후)
+1. `winget install ffmpeg` — 영상 썸네일·트랜스코딩·프레임
+2. `cd backend; .\.venv\Scripts\activate; alembic upgrade head` — **j0a1(annotations) + k0a1(fps/web_relpath)** 적용
+3. `python seed_vfx.py` — cs.* 카테고리 (arxiv #7). 기존 보강은 `$env:SEED_VFX_UPDATE='1'`
+4. `.env` 에 `REDDIT_CLIENT_ID/SECRET` (reddit #7). GITHUB_TOKEN 있으면 github rate 완화
+5. `npm --prefix frontend ci` — lockfile 동기화 (#16)
+6. `.\diagnose.ps1 --full` — #6/#7 + 온톨로지(brand/wiki/wiki_ref) 한 번에 검증 → 출력 공유
+
+### 온톨로지 엔진 — 검증 후 다음 (raw/Lint 미구현)
+- wiki tier 🟢 가동 (자동 wiki + [[link]] 그래프화). raw tier(ModelRawSnapshot) ❌ / Lint ❌ 남음
 
 ---
 
