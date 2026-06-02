@@ -25,7 +25,7 @@ youtube_channels: []
 #    tags: ["research", "video"]
 max_per_channel: 5
 
-# X(트위터) 계정 — fxtwitter 기반 (현재 timeline API 제한 — Phase 3 에서 Nitter 등 보강)
+# X(트위터) 계정 — Playwright + 저장된 로그인 세션(login_helper.py). handle 의 프로필을 긁음.
 x_accounts: []
 #  - handle: "example_account"
 #    tags: ["vfx"]
@@ -37,3 +37,11 @@ reddit:
   keywords: []
   days_back: 3
   max_per_sub: 15
+
+# 아카라이브 — Playwright + 저장된 로그인 세션(login_helper.py). 채널 글목록 수집.
+# Cloudflare/로그인은 저장된 프로필로 통과. channels 비면 skip.
+arca:
+  channels: []
+  #  - slug: "aiart"        # AI 그림 채널 (arca.live/b/aiart)
+  #    tags: ["ai-art"]
+  max_per_channel: 15

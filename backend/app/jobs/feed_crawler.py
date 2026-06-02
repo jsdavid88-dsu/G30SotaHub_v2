@@ -123,6 +123,18 @@ def _run_reddit(cfg: dict) -> list[dict]:
     )
 
 
+def _run_arca(cfg: dict) -> list[dict]:
+    # 아카라이브 채널 글목록 (Playwright + 로그인 프로필). key 존재=enable, 부재=disable.
+    acfg = cfg.get("arca")
+    if acfg is None or not isinstance(acfg, dict):
+        return []
+    channels = acfg.get("channels", [])
+    if not channels:
+        return []
+    from app.sources.feed_arca import fetch_arca_feed
+    return fetch_arca_feed(channels, max_per_channel=acfg.get("max_per_channel", 15))
+
+
 # Source registry: (name, runner, needs_async)
 FEED_SOURCES = [
     ("youtube", _run_youtube, False),
@@ -131,6 +143,7 @@ FEED_SOURCES = [
     ("paperswithcode", _run_paperswithcode, False),
     ("crawl4ai", _run_crawl4ai, False),
     ("reddit", _run_reddit, False),
+    ("arca", _run_arca, False),
 ]
 
 

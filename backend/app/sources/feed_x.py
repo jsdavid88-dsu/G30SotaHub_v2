@@ -147,17 +147,10 @@ def fetch_x_feed(accounts: list[dict], max_per_account: int = 10) -> list[dict]:
 
             logger.info(f"X @{handle}: {len(tweets)} tweets")
 
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-
-    if loop and loop.is_running():
-        import concurrent.futures
-        with concurrent.futures.ThreadPoolExecutor() as pool:
-            pool.submit(lambda: asyncio.run(_run())).result()
-    else:
-        asyncio.run(_run())
+    # Windows 이벤트루프 격리: 앱 전역은 SelectorEventLoop(psycopg)지만 Playwright 는
+    # ProactorEventLoop 필요 → 전용 스레드 + Proactor 루프에서 실행 (_browser_session).
+    from app.sources._browser_session import run_browser_coro
+    run_browser_coro(_run)
 
     logger.info(f"X feed: {len(all_items)} tweets from {len(accounts)} accounts")
     return all_items
