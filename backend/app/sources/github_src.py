@@ -88,12 +88,23 @@ def fetch_github(
 
     # GitHub search query 빌드.
     # 주의(#7): GitHub search 는 공백=AND → 전부 AND 면 거의 0건. OR 로 묶어 recall 확보.
-    # 단 GitHub 은 AND/OR/NOT 연산자 ≤5 제약 → OR term ≤6 (실측: 8 term = OR 7개 → 422).
-    # 권장대로 상위 키워드 4개만 OR (= OR 3개), 토픽은 결합쿼리에서 제외 (필요시 별도 쿼리).
+    # 단 GitHub 은 AND/OR/NOT 연산자 ≤5 제약 → OR term ≤4 로 유지.
+    # (#22-3): keyword 가 있으면 keyword 4개를 OR. keyword 가 없으면 github_topics 를
+    #          topic: 한정자로 폴백(≤4). 예전엔 keyword 없을 때 or_part 가 비어
+    #          `stars:>10 pushed:>...` 광역검색이 나가 rate limit 을 낭비했음(topics 미사용).
     kw_terms = [f'"{kw}"' if " " in kw else kw for kw in keywords[:4]]
-    or_part = " OR ".join(kw_terms)
+    if kw_terms:
+        or_part = " OR ".join(kw_terms)
+    else:
+        topic_terms = [f"topic:{t}" for t in topics[:4] if t]
+        or_part = " OR ".join(topic_terms)
+
+    if not or_part:
+        logger.info("[github] 유효한 검색 term 없음 (keywords/topics 모두 무효) — skip")
+        return []
+
     since = (datetime.now(timezone.utc) - timedelta(days=days_back)).strftime("%Y-%m-%d")
-    query = (f"{or_part} stars:>10 pushed:>{since}").strip() if or_part else f"stars:>10 pushed:>{since}"
+    query = f"{or_part} stars:>10 pushed:>{since}"
     logger.info(f"GitHub search (API): {query}")
 
     repos = _search_github_api(query, max_results)

@@ -125,6 +125,8 @@ async def update_category(
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")
 
+    # non-null 컬럼에 대한 명시적 null 은 CategoryUpdate validator 가 이미 422 로 거절(#22-1).
+    # 여기 도달한 None 은 nullable(description/icon) 의 의도적 clear 뿐 → setattr 안전.
     data = payload.model_dump(exclude_unset=True)
     for field, value in data.items():
         if hasattr(cat, field):

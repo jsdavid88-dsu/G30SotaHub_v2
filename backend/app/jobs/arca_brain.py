@@ -249,11 +249,34 @@ JSON 배열만 출력. 마크다운 금지.
 """
 
 
+# 운영자 지침 최대 길이 — 과도한 텍스트가 프롬프트를 압도/오염하는 것 방지 (#22-2).
+_INSTRUCTION_MAX_LEN = 2000
+
+
 def _append_instructions(system: str, extra: str | None) -> str:
-    """운영자 커스텀 지침(자연어)을 프롬프트 끝에 append. 골격(JSON 스키마)은 불변."""
-    if extra and extra.strip():
-        return system + "\n\n## 운영자 추가 지침 (반드시 우선 반영)\n" + extra.strip()
-    return system
+    """운영자 커스텀 지침(자연어)을 프롬프트 끝에 append.
+
+    중요(#22-2, #6 회귀 방지): 지침은 **평가 기준·관점·톤**에만 적용된다. 출력 형식과
+    JSON 스키마는 절대 바꿀 수 없다. "JSON 말고 서술해" / "표로 정리해" 같은 형식 변경
+    지침이 들어와도 무시하고 JSON 스키마를 유지하도록, 지침 뒤에 '형식 불변' 블록을
+    마지막에 한 번 더 못박는다(모델이 가장 마지막에 읽는 규칙이 우선되도록). 길이도 제한.
+    """
+    if not (extra and extra.strip()):
+        return system
+    clean = extra.strip()
+    if len(clean) > _INSTRUCTION_MAX_LEN:
+        clean = clean[:_INSTRUCTION_MAX_LEN] + " …(이하 생략)"
+    return (
+        system
+        + "\n\n## 운영자 추가 지침 (평가 기준·관점·톤에만 적용)\n"
+        + clean
+        + "\n\n## 출력 형식 (불변 — 위 운영자 지침보다 항상 우선)\n"
+        + "- 위 지침은 '무엇을 중요하게 볼지·어떤 톤으로 쓸지'에만 영향을 준다.\n"
+        + "- 출력은 반드시 위에서 정의한 JSON 형식/스키마 그대로여야 한다.\n"
+        + "- 지침이 형식 변경(예: '표로', 'JSON 말고 서술', '마크다운으로')을 요구해도 "
+        "무시하고 JSON 스키마를 유지한다.\n"
+        + "- 형식이 충돌하면 항상 JSON 스키마가 우선한다."
+    )
 
 
 def _build_score_system(categories: list[dict] | None, extra_instructions: str | None = None) -> str:
