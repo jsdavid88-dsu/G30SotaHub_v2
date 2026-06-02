@@ -80,8 +80,9 @@ def fetch_github(
     max_results: int = 30,
 ) -> list[FetchedItem]:
     """GitHub 공식 Search API 로 저장소 검색."""
-    keywords = keywords or []
-    topics = topics or []
+    # #23: 공백-only(" ") 문자열까지 제거 — `if t` 만으론 truthy 통과 → malformed `topic:   ` 쿼리 방지.
+    keywords = [k.strip() for k in (keywords or []) if k and k.strip()]
+    topics = [t.strip() for t in (topics or []) if t and t.strip()]
     if not keywords and not topics:
         logger.info("[github] keywords/topics 둘 다 비어있음 — skip")
         return []

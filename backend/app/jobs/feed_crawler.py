@@ -84,19 +84,22 @@ def _run_x(cfg: dict) -> list[dict]:
 
 
 def _run_hf_trending(cfg: dict) -> list[dict]:
-    hf_cfg = cfg.get("huggingface_trending", {})
-    if not hf_cfg:
+    # #7: key 존재(빈 {} 포함)=enable, key 부재=disable. hf_trending 은 설정 없이도
+    # 공개 API(daily_papers)로 동작하므로 빈 dict 를 falsy 로 막으면 안 됨.
+    hf_cfg = cfg.get("huggingface_trending")
+    if hf_cfg is None:
         return []
     from app.sources.feed_hf_trending import fetch_hf_trending
-    return fetch_hf_trending(hf_cfg)
+    return fetch_hf_trending(hf_cfg or {})
 
 
 def _run_paperswithcode(cfg: dict) -> list[dict]:
-    pwc_cfg = cfg.get("paperswithcode", {})
-    if not pwc_cfg:
+    # #7: key 존재(빈 {} 포함)=enable, key 부재=disable (위 _run_hf_trending 과 동일).
+    pwc_cfg = cfg.get("paperswithcode")
+    if pwc_cfg is None:
         return []
     from app.sources.feed_paperswithcode import fetch_paperswithcode_feed
-    return fetch_paperswithcode_feed(pwc_cfg)
+    return fetch_paperswithcode_feed(pwc_cfg or {})
 
 
 def _run_crawl4ai(cfg: dict) -> list[dict]:

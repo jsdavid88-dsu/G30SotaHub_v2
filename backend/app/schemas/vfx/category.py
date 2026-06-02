@@ -1,5 +1,25 @@
 """Category Pydantic schemas."""
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+
+
+# 검색 힌트 리스트(keywords/topics/...) 정규화: 항목별 trim + 빈/공백-only 제거 + dedupe(순서유지).
+# #23: 공백-only("  ")가 DB/시드/API 로 흘러들어 crawler 쿼리(`topic:   ...`)를 깨뜨리던 것을 진입점에서 차단.
+_STR_LIST_FIELDS = ("keywords", "github_topics", "hf_tags", "subreddits", "x_accounts", "current_sota")
+
+
+def _clean_str_list(v: list | None) -> list | None:
+    if v is None:
+        return None
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in v:
+        if not isinstance(item, str):
+            continue
+        s = item.strip()
+        if s and s not in seen:
+            seen.add(s)
+            out.append(s)
+    return out
 
 
 class CategoryBase(BaseModel):
@@ -15,6 +35,11 @@ class CategoryBase(BaseModel):
     x_accounts: list[str] = []
     current_sota: list[str] = []
     display_order: int = 0
+
+    @field_validator(*_STR_LIST_FIELDS)
+    @classmethod
+    def _normalize_str_lists(cls, v):
+        return _clean_str_list(v)
 
 
 class CategoryCreate(CategoryBase):
@@ -44,6 +69,11 @@ class CategoryUpdate(BaseModel):
     x_accounts: list[str] | None = None
     current_sota: list[str] | None = None
     display_order: int | None = None
+
+    @field_validator(*_STR_LIST_FIELDS)
+    @classmethod
+    def _normalize_str_lists(cls, v):
+        return _clean_str_list(v)
 
     @model_validator(mode="after")
     def _reject_null_on_non_nullable(self) -> "CategoryUpdate":
