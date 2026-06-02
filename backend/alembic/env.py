@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from logging.config import fileConfig
 
 from alembic import context
@@ -7,6 +8,11 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.config import settings
 from app.models import Base
+
+# 이슈 #21/#9: Windows 운영 PC 에서 `alembic upgrade head` 가 asyncio.run() →
+# 기본 ProactorEventLoop 에서 psycopg async 비호환으로 터짐. run_server.py 와 동일 패턴.
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

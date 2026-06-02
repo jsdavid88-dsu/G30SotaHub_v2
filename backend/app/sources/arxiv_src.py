@@ -113,10 +113,20 @@ def fetch_arxiv(
     logger.info(f"[arxiv] cats={cats}, days_back={days_back}, max={max_results}")
     logger.info(f"[arxiv] GET {url}")
     try:
-        resp = get_with_retry(url, timeout=60, follow_redirects=True)
-        resp.raise_for_status()
+        # arxiv export API 는 rate 민감 → 재시도 적게(2회)·백오프 길게(3s). DNS 블립만 커버.
+        resp = get_with_retry(url, timeout=60, follow_redirects=True, retries=2, backoff=3.0)
     except httpx.HTTPError as e:
         logger.error(f"[arxiv] HTTP failed (재시도 후): {e}")
+        return []
+    # 429(Too Many Requests)는 재시도해도 회복 안 됨(rate window) → 즉시 스킵 (#7/#21)
+    if resp.status_code == 429:
+        retry_after = resp.headers.get("Retry-After", "?")
+        logger.warning(f"[arxiv] 429 rate limit (Retry-After={retry_after}) — 이번 run skip")
+        return []
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPError as e:
+        logger.error(f"[arxiv] status {resp.status_code}: {e}")
         return []
 
     logger.info(f"[arxiv] resp status={resp.status_code}, content_len={len(resp.content)}")

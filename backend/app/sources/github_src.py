@@ -87,10 +87,10 @@ def fetch_github(
         return []
 
     # GitHub search query 빌드.
-    # 주의(#7 Task1): GitHub search 는 공백=AND. 키워드를 전부 AND 로 묶으면 거의 0건
-    # (실측: AND=0 / OR 3개=57). → 키워드는 OR 로 묶어 recall 확보, qualifier(stars/pushed)만 AND.
-    kw_terms = [f'"{kw}"' if " " in kw else kw for kw in keywords[:5]]
-    kw_terms += [f"topic:{t}" for t in topics[:3]]
+    # 주의(#7): GitHub search 는 공백=AND → 전부 AND 면 거의 0건. OR 로 묶어 recall 확보.
+    # 단 GitHub 은 AND/OR/NOT 연산자 ≤5 제약 → OR term ≤6 (실측: 8 term = OR 7개 → 422).
+    # 권장대로 상위 키워드 4개만 OR (= OR 3개), 토픽은 결합쿼리에서 제외 (필요시 별도 쿼리).
+    kw_terms = [f'"{kw}"' if " " in kw else kw for kw in keywords[:4]]
     or_part = " OR ".join(kw_terms)
     since = (datetime.now(timezone.utc) - timedelta(days=days_back)).strftime("%Y-%m-%d")
     query = (f"{or_part} stars:>10 pushed:>{since}").strip() if or_part else f"stars:>10 pushed:>{since}"
