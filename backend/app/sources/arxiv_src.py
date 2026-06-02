@@ -11,7 +11,7 @@ from xml.etree import ElementTree as ET
 
 import httpx
 
-from app.sources.base import FetchedItem
+from app.sources.base import FetchedItem, get_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -113,10 +113,10 @@ def fetch_arxiv(
     logger.info(f"[arxiv] cats={cats}, days_back={days_back}, max={max_results}")
     logger.info(f"[arxiv] GET {url}")
     try:
-        resp = httpx.get(url, timeout=60, follow_redirects=True)
+        resp = get_with_retry(url, timeout=60, follow_redirects=True)
         resp.raise_for_status()
     except httpx.HTTPError as e:
-        logger.error(f"[arxiv] HTTP failed: {e}")
+        logger.error(f"[arxiv] HTTP failed (재시도 후): {e}")
         return []
 
     logger.info(f"[arxiv] resp status={resp.status_code}, content_len={len(resp.content)}")

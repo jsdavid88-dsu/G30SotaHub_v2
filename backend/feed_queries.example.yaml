@@ -1,0 +1,39 @@
+# feed_queries — 피드 크롤러 큐레이션 (#7 Task4)
+#
+# 사용법: 이 파일을 backend/feed_queries.yaml 로 복사 후 편집.
+#   cp backend/feed_queries.example.yaml backend/feed_queries.yaml
+# (파일이 없으면 feed_crawler 가 6개 피드 소스를 전부 빈 리스트로 early-return → feed 0건)
+#
+# - huggingface_trending / paperswithcode: 외부 trending API → 빈 설정({})으로도 즉시 동작
+# - youtube / x / reddit: 채널·계정·자격증명을 채워야 동작
+
+# HuggingFace 일일 trending papers (빈 dict 로 기본 동작)
+huggingface_trending: {}
+
+# Papers With Code trending (빈 dict 로 기본 동작)
+paperswithcode: {}
+
+# crawl4ai 웹 검색 쿼리 (선택)
+crawl4ai_queries: []
+#  - "text to video generation 2026"
+#  - "diffusion model VFX"
+
+# YouTube 채널 (RSS) — channel_id 채우면 동작
+youtube_channels: []
+#  - channel_id: "UCbfYPyITQ-7l4upoX8nvctg"   # 예: Two Minute Papers
+#    name: "Two Minute Papers"
+#    tags: ["research", "video"]
+max_per_channel: 5
+
+# X(트위터) 계정 — fxtwitter 기반 (현재 timeline API 제한 — Phase 3 에서 Nitter 등 보강)
+x_accounts: []
+#  - handle: "example_account"
+#    tags: ["vfx"]
+max_per_account: 10
+
+# Reddit — .env 에 REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET 필요
+reddit:
+  subreddits: []        # ["StableDiffusion", "comfyui", "MachineLearning"]
+  keywords: []
+  days_back: 3
+  max_per_sub: 15

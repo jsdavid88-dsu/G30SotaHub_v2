@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 
 import httpx
-from app.sources.base import FetchedItem
+from app.sources.base import FetchedItem, get_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ def _search_github_api(query: str, max_results: int = 30) -> list[dict]:
         headers["Authorization"] = f"Bearer {settings.github_token}"
 
     try:
-        r = httpx.get(
+        r = get_with_retry(
             "https://api.github.com/search/repositories",
             params={
                 "q": query,
@@ -86,14 +86,14 @@ def fetch_github(
         logger.info("[github] keywords/topics 둘 다 비어있음 — skip")
         return []
 
-    # GitHub search query 빌드
-    parts: list[str] = []
-    for kw in keywords[:5]:
-        parts.append(f'"{kw}"' if " " in kw else kw)
-    for t in topics[:3]:
-        parts.append(f"topic:{t}")
+    # GitHub search query 빌드.
+    # 주의(#7 Task1): GitHub search 는 공백=AND. 키워드를 전부 AND 로 묶으면 거의 0건
+    # (실측: AND=0 / OR 3개=57). → 키워드는 OR 로 묶어 recall 확보, qualifier(stars/pushed)만 AND.
+    kw_terms = [f'"{kw}"' if " " in kw else kw for kw in keywords[:5]]
+    kw_terms += [f"topic:{t}" for t in topics[:3]]
+    or_part = " OR ".join(kw_terms)
     since = (datetime.now(timezone.utc) - timedelta(days=days_back)).strftime("%Y-%m-%d")
-    query = " ".join(parts) + f" stars:>10 pushed:>{since}"
+    query = (f"{or_part} stars:>10 pushed:>{since}").strip() if or_part else f"stars:>10 pushed:>{since}"
     logger.info(f"GitHub search (API): {query}")
 
     repos = _search_github_api(query, max_results)
