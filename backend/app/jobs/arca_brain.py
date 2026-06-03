@@ -245,7 +245,7 @@ SCORE_SYSTEM_TEMPLATE = """너는 VFX SOTA Monitor의 분석 AI '아르카'.
 - 일반 명사(diffusion, transformer, video, model 등)는 brand 가 아니다 → null.
 - 확신 없으면 null. 추측하지 마라.
 
-JSON 배열만 출력. 마크다운 금지.
+JSON 배열만 출력. 마크다운·설명·추론 과정 없이 즉시 JSON 배열만 출력한다.
 """
 
 
@@ -295,6 +295,20 @@ def _build_score_system(categories: list[dict] | None, extra_instructions: str |
     return _append_instructions(system, extra_instructions)
 
 
+def _build_score_user(items: list[dict]) -> str:
+    """score_items 용 user 메시지 빌드 (배치/단건 폴백 공용)."""
+    parts = [f"아래 {len(items)}개 아이템을 분석해줘.\n"]
+    for i, item in enumerate(items, 1):
+        parts.append(f"## 아이템 {i}")
+        parts.append(f"- 소스: {item.get('source', '?')}")
+        parts.append(f"- 제목: {item.get('title', '?')}")
+        abstract = (item.get("abstract") or "")[:800]
+        if abstract:
+            parts.append(f"- 내용:\n{abstract}")
+        parts.append("")
+    return "\n".join(parts)
+
+
 def score_items(
     items: list[dict], categories: list[dict] | None = None, extra_instructions: str | None = None
 ) -> list[dict]:
@@ -309,30 +323,43 @@ def score_items(
 
     system = _build_score_system(categories, extra_instructions)
 
-    parts = [f"아래 {len(items)}개 아이템을 분석해줘.\n"]
-    for i, item in enumerate(items, 1):
-        parts.append(f"## 아이템 {i}")
-        parts.append(f"- 소스: {item.get('source', '?')}")
-        parts.append(f"- 제목: {item.get('title', '?')}")
-        abstract = (item.get("abstract") or "")[:800]
-        if abstract:
-            parts.append(f"- 내용:\n{abstract}")
-        parts.append("")
-
-    # Issue #6 fix: 500/item → 1800/item (Gemma4 26B thinking 모델 reasoning 여유)
-    raw = _call_gemma(system, "\n".join(parts), temperature=0.3, max_tokens=len(items) * 1800)
+    # 1차: 배치 통째 시도 (Gemma4 thinking 여유분 1800/item)
+    raw = _call_gemma(system, _build_score_user(items), temperature=0.3, max_tokens=len(items) * 1800)
     parsed = _parse_json(raw)
+    if isinstance(parsed, list):
+        return parsed
 
-    if not isinstance(parsed, list):
-        # Issue #6 fix: 디버그용 — raw 응답 첫 800자 + 길이 로그
-        snippet = raw[:800].replace("\n", "\\n") if raw else "<empty>"
-        logger.warning(
-            f"Scoring: failed to parse response (items={len(items)}, raw_len={len(raw)}, "
-            f"raw_snippet={snippet!r})"
-        )
-        return []
+    # Issue #6 재발 방지 (5090 실측: 풀배치서 unscored 22): 배치 파싱 실패는 대개
+    # thinking-overflow(reasoning 이 completion 토큰 다 먹어 content_len=0). 기존엔 여기서
+    # return [] → 배치(최대 3건) 통째 유실. 대신 1건씩 + max_tokens 크게(4000) 재시도해 복구.
+    # (실패한 배치에만 추가 비용. 동시성/배치폭 증가 아님 → #21 전력 영향 없음.)
+    # night_batch 가 결과를 위치(index)로 매핑하므로, 폴백도 items 순서대로 정렬 유지(실패=빈 dict).
+    snippet = raw[:300].replace("\n", "\\n") if raw else "<empty>"
+    logger.warning(
+        f"Scoring 배치 파싱 실패 (items={len(items)}, raw_len={len(raw)}, snippet={snippet!r}) → 1건씩 폴백"
+    )
+    if len(items) == 1:
+        logger.warning(f"Scoring 단건도 실패 — skip: {str(items[0].get('title', ''))[:60]!r}")
+        return [{}]  # 위치 정렬용 placeholder (night_batch 는 relevancy_score 없으면 skip)
 
-    return parsed
+    out: list[dict] = []
+    recovered = 0
+    for it in items:
+        r1 = _call_gemma(system, _build_score_user([it]), temperature=0.3, max_tokens=4000)
+        p1 = _parse_json(r1)
+        obj = None
+        if isinstance(p1, list) and p1 and isinstance(p1[0], dict):
+            obj = p1[0]
+        elif isinstance(p1, dict):
+            obj = p1
+        if obj and obj.get("relevancy_score") not in (None, ""):
+            out.append(obj)
+            recovered += 1
+        else:
+            out.append({})  # 위치 정렬 유지
+            logger.warning(f"Scoring 단건 폴백 실패: {str(it.get('title', ''))[:60]!r} (len={len(r1)})")
+    logger.info(f"Scoring 폴백: {recovered}/{len(items)} 복구")
+    return out
 
 
 # ── 3. Category Promotion Suggestion ─────────────────────────

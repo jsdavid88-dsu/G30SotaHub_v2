@@ -15,6 +15,8 @@ os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 
 import httpx
 
+from app.sources.base import get_with_retry
+
 logger = logging.getLogger(__name__)
 
 
@@ -25,12 +27,14 @@ def fetch_paperswithcode_feed(cfg: dict) -> list[dict]:
     items: list[dict] = []
 
     try:
-        # Use their HTML page with httpx (lightweight, no JS needed)
-        r = httpx.get(
+        # #7: getaddrinfo(DNS)/일시 네트워크 오류에 재시도 (get_with_retry). httpx.get 직접 호출 X.
+        r = get_with_retry(
             "https://paperswithcode.com/latest",
             timeout=15,
             follow_redirects=True,
             headers={"User-Agent": "Mozilla/5.0 VFX-SOTA-Monitor"},
+            retries=3,
+            backoff=2.0,
         )
         if r.status_code != 200:
             logger.warning(f"PapersWithCode: HTTP {r.status_code}")

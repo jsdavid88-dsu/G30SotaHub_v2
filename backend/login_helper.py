@@ -26,9 +26,9 @@ from pathlib import Path
 DEFAULT_PROFILE_DIR = str(Path(__file__).resolve().parent / "data" / "x_browser_profile")
 
 # 로그인할 사이트 (탭으로 한 번에 염)
+# Reddit 은 PRAW(.env REDDIT_CLIENT_ID/SECRET) 사용 → 브라우저 로그인 불필요(제외).
 SITES = [
     ("아카라이브", "https://arca.live"),
-    ("Reddit", "https://www.reddit.com/login"),
     ("X (버너 계정)", "https://x.com/login"),
 ]
 
@@ -45,22 +45,28 @@ async def main(profile_dir: str) -> None:
     print("[login] 브라우저 창을 엽니다. 각 탭에서 로그인하세요 (X 는 반드시 버너 계정).")
 
     async with async_playwright() as p:
+        # 5090 실측(#7): 번들 chromium 은 Cloudflare(arca)/X 봇탐지로 로그인 실패.
+        # 시스템 Chrome(channel="chrome")으로 띄우면 Cloudflare Turnstile 통과. Chrome 없으면 번들 폴백.
+        _common = dict(
+            headless=False,
+            args=["--disable-blink-features=AutomationControlled"],
+            ignore_default_args=["--enable-automation"],
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "Chrome/131.0.0.0 Safari/537.36"
+            ),
+        )
         try:
-            ctx = await p.chromium.launch_persistent_context(
-                profile_dir,
-                headless=False,
-                # feed_x.py 와 동일한 anti-detection 설정으로 세션 생성 (일관성).
-                args=["--disable-blink-features=AutomationControlled"],
-                ignore_default_args=["--enable-automation"],
-                user_agent=(
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                    "Chrome/131.0.0.0 Safari/537.36"
-                ),
-            )
-        except Exception as e:
-            print(f"[login] 브라우저 실행 실패: {e}")
-            print("[login] chromium 미설치면: python -m playwright install chromium")
-            sys.exit(1)
+            ctx = await p.chromium.launch_persistent_context(profile_dir, channel="chrome", **_common)
+            print("[login] 시스템 Chrome(channel=chrome) 사용 — Cloudflare 통과율 높음")
+        except Exception as e_chrome:
+            print(f"[login] Chrome 실행 실패({e_chrome}) — 번들 chromium 폴백 (Cloudflare 막힐 수 있음)")
+            try:
+                ctx = await p.chromium.launch_persistent_context(profile_dir, **_common)
+            except Exception as e:
+                print(f"[login] 브라우저 실행 실패: {e}")
+                print("[login] chromium 미설치면: python -m playwright install chromium")
+                sys.exit(1)
 
         for name, url in SITES:
             page = await ctx.new_page()
