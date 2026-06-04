@@ -140,7 +140,7 @@ FEED_SOURCES = [
     ("youtube", _run_youtube, False),
     ("x", _run_x, False),
     ("hf_trending", _run_hf_trending, False),
-    ("paperswithcode", _run_paperswithcode, False),
+    # ("paperswithcode", _run_paperswithcode, False),  # 비활성: 소스 폐기(/latest 302→HF 이전). HF daily_papers 가 커버 (#7)
     ("crawl4ai", _run_crawl4ai, False),
     ("reddit", _run_reddit, False),
     ("arca", _run_arca, False),

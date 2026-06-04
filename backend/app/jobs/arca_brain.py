@@ -174,9 +174,20 @@ FILTER_SYSTEM = """너는 VFX SOTA Monitor의 필터링 AI '아르카'.
 - tags: 관련 태그 1-3개 (한국어, 예: "비디오 생성", "3D 가우시안", "페이스 스왑")
 - reason: 판단 근거 한 줄
 
-JSON 배열만 출력. 입력 순서 유지. 마크다운/설명 금지.
+추론 과정 없이 JSON 배열만 출력. 입력 순서 유지. 마크다운/설명 금지.
 [{"id": 1, "relevant": true, "tags": ["태그"], "reason": "근거"}, ...]
 """
+
+
+def _build_filter_user(items: list[dict]) -> str:
+    """filter_feed_items 용 user 메시지 빌드 (배치/단건 폴백 공용)."""
+    parts = []
+    for i, item in enumerate(items, 1):
+        title = item.get("title", "")[:200]
+        excerpt = (item.get("excerpt") or item.get("abstract") or "")[:300]
+        source = item.get("source", "")
+        parts.append(f"{i}. [{source}] {title}\n   {excerpt}")
+    return f"아래 {len(items)}개 피드 아이템을 필터링해줘.\n\n" + "\n\n".join(parts)
 
 
 def filter_feed_items(items: list[dict]) -> list[dict]:
@@ -184,28 +195,40 @@ def filter_feed_items(items: list[dict]) -> list[dict]:
     if not items:
         return []
 
-    parts = []
-    for i, item in enumerate(items, 1):
-        title = item.get("title", "")[:200]
-        excerpt = (item.get("excerpt") or item.get("abstract") or "")[:300]
-        source = item.get("source", "")
-        parts.append(f"{i}. [{source}] {title}\n   {excerpt}")
-
-    user_msg = f"아래 {len(items)}개 피드 아이템을 필터링해줘.\n\n" + "\n\n".join(parts)
-
-    # Issue #6 fix: 200/item → 800/item (thinking 여유)
-    raw = _call_gemma(FILTER_SYSTEM, user_msg, temperature=0.1, max_tokens=len(items) * 800)
+    # 1차: 배치 통째 (thinking 여유 800/item)
+    raw = _call_gemma(FILTER_SYSTEM, _build_filter_user(items), temperature=0.1, max_tokens=len(items) * 800)
     parsed = _parse_json(raw)
+    if isinstance(parsed, list):
+        return parsed
 
-    if not isinstance(parsed, list):
-        snippet = raw[:500].replace("\n", "\\n") if raw else "<empty>"
-        logger.warning(
-            f"Feed filter: failed to parse (items={len(items)}, raw_len={len(raw)}, snippet={snippet!r})"
-        )
-        # Fallback: mark all as relevant
-        return [{"id": i + 1, "relevant": True, "tags": [], "reason": "파싱 실패"} for i in range(len(items))]
+    # Issue #6 (5090 실측): filter 도 score 와 같은 thinking-overflow 로 batch 파싱 실패(content_len=0)
+    # → 기존엔 "전부 relevant" 로 빠져 필터가 무력화(노이즈 전부 통과). score_items 처럼 1건씩 폴백.
+    # 단건도 실패하면 그 1건만 relevant=True 안전망(아이템 유실 방지). night_batch 는 위치(index)로 매핑.
+    snippet = raw[:300].replace("\n", "\\n") if raw else "<empty>"
+    logger.warning(
+        f"Feed filter 배치 파싱 실패 (items={len(items)}, raw_len={len(raw)}, snippet={snippet!r}) → 1건씩 폴백"
+    )
+    if len(items) == 1:
+        return [{"id": 1, "relevant": True, "tags": [], "reason": "파싱 실패(단건 폴백)"}]
 
-    return parsed
+    out: list[dict] = []
+    recovered = 0
+    for idx, it in enumerate(items, 1):
+        r1 = _call_gemma(FILTER_SYSTEM, _build_filter_user([it]), temperature=0.1, max_tokens=1500)
+        p1 = _parse_json(r1)
+        obj = None
+        if isinstance(p1, list) and p1 and isinstance(p1[0], dict):
+            obj = p1[0]
+        elif isinstance(p1, dict):
+            obj = p1
+        if obj and "relevant" in obj:
+            obj["id"] = idx  # 위치 정렬용 id 보정
+            out.append(obj)
+            recovered += 1
+        else:
+            out.append({"id": idx, "relevant": True, "tags": [], "reason": "파싱 실패(폴백)"})
+    logger.info(f"Feed filter 폴백: {recovered}/{len(items)} 파싱 복구")
+    return out
 
 
 # ── 2. Item Scoring ──────────────────────────────────────────

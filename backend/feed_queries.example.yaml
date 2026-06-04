@@ -10,8 +10,8 @@
 # HuggingFace 일일 trending papers (빈 dict 로 기본 동작)
 huggingface_trending: {}
 
-# Papers With Code trending (빈 dict 로 기본 동작)
-paperswithcode: {}
+# Papers With Code — 비활성 (소스 폐기: /latest 가 302→HF 이전). HF daily_papers 가 papers 커버 (#7)
+# paperswithcode: {}
 
 # crawl4ai 웹 검색 쿼리 (선택)
 crawl4ai_queries: []
