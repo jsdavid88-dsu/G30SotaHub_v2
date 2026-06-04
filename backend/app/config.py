@@ -75,6 +75,13 @@ class Settings(BaseSettings):
     # CORS 추가 (VFX 프론트가 별도 포트에서 도는 경우 대비, 기본은 Hub 와 동일)
     cors_extra_origins: list[str] = []
 
+    # Local Deep Research (LDR) — agentic 발견 엔진 (별도 설치, run_deep_research.py 가 호출)
+    # LDR 은 자체 user DB 가 있어 settings_snapshot 조회에 계정 필요.
+    ldr_username: str = ""
+    ldr_password: str = ""
+    ldr_iterations: int = 2
+    ldr_questions_per_iteration: int = 3
+
     model_config = {"env_file": _ENV_FILE, "extra": "ignore"}
 
 
