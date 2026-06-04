@@ -25,6 +25,7 @@ from app.models.vfx_category import Category
 from app.models.vfx_item import Item, ItemCategory, SotaItem, LifecycleStatus, ConfidenceStatus
 from app.models.vfx_item_group import ItemGroup
 from app.models.vfx_lineage import LineageEdge
+from app.models.vfx_raw_snapshot import ModelRawSnapshot
 from app.models.vfx_comment import ItemComment
 from app.models.vfx_crawl_run import CrawlRun
 from app.models.vfx_feed_item import FeedItem
@@ -76,6 +77,7 @@ __all__ = [
     "LifecycleStatus", "ConfidenceStatus",
     "ItemGroup",
     "LineageEdge",
+    "ModelRawSnapshot",
     "ItemComment",
     "CrawlRun",
     "FeedItem",

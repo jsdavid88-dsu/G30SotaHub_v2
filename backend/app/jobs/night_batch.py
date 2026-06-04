@@ -473,7 +473,17 @@ async def run_night_batch() -> list[dict]:
     run_state.update(stage="0/7 자동 수집 (arxiv/github/hf/reddit)", progress=0.05)
     r = await step_crawl_all_sources()
     results.append(r)
-    run_state.update(detail=f"수집: 연구 {r.get('research_new', 0)} + 피드 {r.get('feed_new', 0)}", progress=0.18)
+    run_state.update(detail=f"수집: 연구 {r.get('research_new', 0)} + 피드 {r.get('feed_new', 0)}", progress=0.16)
+
+    # Step 0.5: raw tier 스냅샷 (Karpathy raw/ — 소스 원본 불변 보존)
+    run_state.update(stage="raw 원본 스냅샷", progress=0.18)
+    try:
+        from app.jobs.raw_snapshot import snapshot_raw
+        rr = await snapshot_raw()
+    except Exception as e:
+        logger.exception("[night] raw snapshot failed")
+        rr = {"step": "raw_snapshot", "error": str(e)}
+    results.append(rr)
 
     # Step 1: Submissions
     run_state.update(stage="1/7 제보 처리 (Crawl4AI)", progress=0.20)
@@ -509,11 +519,26 @@ async def run_night_batch() -> list[dict]:
     run_state.update(stage="6/7 카테고리 승격 검토 (Gemma4)", progress=0.88)
     r = await step_detect_promotions()
     results.append(r)
-    run_state.update(
-        stage="7/7 마무리",
-        detail=f"신규 카테고리 제안: {r.get('new_suggestions', 0)}",
-        progress=1.0,
-    )
+    run_state.update(detail=f"신규 카테고리 제안: {r.get('new_suggestions', 0)}", progress=0.92)
+
+    # Lint: 온톨로지 위생 점검 (stale 자동 태깅 + orphan/dangling/contradiction/dup 보고)
+    run_state.update(stage="온톨로지 Lint 점검", progress=0.95)
+    try:
+        from app.jobs.lint import run_lint
+        lint_report = await run_lint(auto_tag_stale=True)
+        results.append({
+            "step": "lint",
+            "stale": lint_report["stale"]["count"],
+            "stale_tagged": lint_report["stale"]["auto_tagged"],
+            "orphan": lint_report["orphan"]["count"],
+            "dangling": lint_report["dangling_wikilinks"]["count"],
+            "contradictions": lint_report["contradictions"]["count"],
+            "duplicates": lint_report["duplicates"]["count"],
+        })
+    except Exception as e:
+        logger.exception("[night] lint failed")
+        results.append({"step": "lint", "error": str(e)})
+    run_state.update(stage="마무리", progress=1.0)
 
     logger.info(f"========== Night Batch Done ==========")
     for r in results:
