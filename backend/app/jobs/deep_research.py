@@ -11,11 +11,13 @@ from __future__ import annotations
 
 import logging
 import re
+import xml.etree.ElementTree as ET
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.database import SessionLocal
 from app.models import Item
+from app.sources.base import get_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +108,91 @@ def extract_findings_from_ldr(result, query: str = "") -> list[dict]:
     return list(seen.values())
 
 
+# ── enrich: 추출한 소스를 공식 메타(제목/초록)로 보강 → Arca 가 풍부한 입력으로 분석 ──
+_ARXIV_NS = {"atom": "http://www.w3.org/2005/Atom"}
+
+
+def _enrich_arxiv(ext_id: str) -> dict | None:
+    try:
+        r = get_with_retry(
+            f"http://export.arxiv.org/api/query?id_list={ext_id}",
+            timeout=20, retries=2, backoff=2.0,
+        )
+        e = ET.fromstring(r.content).find("atom:entry", _ARXIV_NS)
+        if e is None:
+            return None
+        title = (e.findtext("atom:title", default="", namespaces=_ARXIV_NS) or "").strip()
+        summary = (e.findtext("atom:summary", default="", namespaces=_ARXIV_NS) or "").strip()
+        return {"title": title or None, "abstract": summary or None, "meta": {}}
+    except Exception as ex:  # noqa: BLE001
+        logger.debug(f"[enrich:arxiv] {ext_id} 실패: {ex}")
+        return None
+
+
+def _enrich_github(repo: str) -> dict | None:
+    from app.config import settings
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    if getattr(settings, "github_token", None):
+        headers["Authorization"] = f"Bearer {settings.github_token}"
+    try:
+        r = get_with_retry(f"https://api.github.com/repos/{repo}", headers=headers, timeout=15, retries=2)
+        if r.status_code != 200:
+            return None
+        d = r.json()
+        return {
+            "title": d.get("full_name") or repo,
+            "abstract": d.get("description") or None,
+            "meta": {
+                "stars": d.get("stargazers_count"), "forks": d.get("forks_count"),
+                "language": d.get("language"), "topics": d.get("topics", []),
+            },
+        }
+    except Exception as ex:  # noqa: BLE001
+        logger.debug(f"[enrich:github] {repo} 실패: {ex}")
+        return None
+
+
+def _enrich_hf(model_id: str) -> dict | None:
+    try:
+        r = get_with_retry(f"https://huggingface.co/api/models/{model_id}", timeout=15, retries=2)
+        if r.status_code != 200:
+            return None
+        d = r.json()
+        card = d.get("cardData") or {}
+        return {
+            "title": d.get("id") or model_id,
+            "abstract": (card.get("summary") or card.get("description")) or None,
+            "meta": {
+                "downloads": d.get("downloads"), "likes": d.get("likes"),
+                "pipeline_tag": d.get("pipeline_tag"), "tags": (d.get("tags") or [])[:20],
+            },
+        }
+    except Exception as ex:  # noqa: BLE001
+        logger.debug(f"[enrich:hf] {model_id} 실패: {ex}")
+        return None
+
+
+def enrich_findings(findings: list[dict]) -> list[dict]:
+    """각 finding 을 소스 공식 메타로 보강(제목/초록/stats). 실패 시 bare 유지(graceful)."""
+    enrichers = {"arxiv": _enrich_arxiv, "github": _enrich_github, "hf": _enrich_hf}
+    enriched = 0
+    for f in findings:
+        fn = enrichers.get(f.get("source"))
+        info = fn(f["external_id"]) if fn else None
+        if not info:
+            continue
+        if info.get("title"):
+            f["title"] = info["title"][:2000]
+        if info.get("abstract"):
+            f["abstract"] = info["abstract"][:5000]
+        meta = {k: v for k, v in (info.get("meta") or {}).items() if v not in (None, [], "")}
+        if meta:
+            f["enrich_meta"] = meta
+        enriched += 1
+    logger.info(f"[deep_research] enriched {enriched}/{len(findings)} findings")
+    return findings
+
+
 async def ingest_findings(findings: list[dict]) -> dict:
     """findings → Item upsert (llm_score=0 → Arca 가 다음에 정리).
 
@@ -115,6 +202,8 @@ async def ingest_findings(findings: list[dict]) -> dict:
     async with SessionLocal() as db:
         for f in findings:
             md = {"discovered_via": "ldr", "ldr_query": f.get("query", "")}
+            if f.get("enrich_meta"):
+                md.update(f["enrich_meta"])
             stmt = (
                 pg_insert(Item)
                 .values(

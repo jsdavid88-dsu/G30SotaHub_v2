@@ -33,7 +33,9 @@ LDR_PASSWORD=<비번>
 cd backend
 python run_deep_research.py "latest text-to-video diffusion models 2026"
 ```
-하는 일: LDR 리서치 → `data/ldr_last_result.json` 덤프 → 소스(arxiv/github/hf) 추출 → Item 적재 → Arca(gemma4) `step_score_items` 로 정리 → 리포트.
+하는 일: LDR 리서치 → `data/ldr_last_result.json` 덤프 → 소스(arxiv/github/hf) 추출
+→ **공식 메타 enrich**(arxiv 초록 / github description·stars / hf 카드 — Arca 입력 품질↑)
+→ Item 적재 → Arca(gemma4) `step_score_items` 로 재분석·정리 → 리포트.
 
 ## 5) 결과 공유 (dev 가 어댑터 확정)
 - 콘솔의 `result keys:` + `findings=N`

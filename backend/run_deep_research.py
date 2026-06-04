@@ -60,13 +60,12 @@ def _run_ldr(query: str):
         return None, f"LDR 실행 실패: {type(e).__name__}: {e}"
 
 
-async def _ingest_and_score(result, query: str) -> dict:
-    from app.jobs.deep_research import extract_findings_from_ldr, ingest_findings
+async def _ingest_and_score(findings: list) -> dict:
+    from app.jobs.deep_research import ingest_findings
     from app.jobs.night_batch import step_score_items
 
-    findings = extract_findings_from_ldr(result, query=query)
     ingest = await ingest_findings(findings)
-    print(f"  - findings={ingest['candidates']} → ingested_new={ingest['ingested_new']}")
+    print(f"  - ingested_new={ingest['ingested_new']}/{ingest['candidates']}")
 
     print("  - Arca(gemma4) 정리 중 (step_score_items)...")
     score = await step_score_items()
@@ -95,12 +94,17 @@ def main() -> None:
     if isinstance(result, dict):
         print(f"  - result keys: {list(result.keys())}")
 
-    # 3) 우리 DB 작업은 win32 SelectorEventLoop (psycopg async)
+    # 3) 소스 추출 + 공식 메타 enrich (sync) → DB 작업(async)
+    from app.jobs.deep_research import enrich_findings, extract_findings_from_ldr
+    findings = extract_findings_from_ldr(result, query=query)
+    print(f"[2/3] 소스 추출: {len(findings)}건 → 공식 메타 enrich (arxiv/github/hf)...")
+    findings = enrich_findings(findings)  # 제목·초록·stats 보강 → Arca 입력 품질↑
+
+    # 우리 DB 작업은 win32 SelectorEventLoop (psycopg async)
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    print("[2/3] 소스 추출 + Item 적재...")
-    print("[3/3] Arca 정리...")
-    stats = asyncio.run(_ingest_and_score(result, query))
+    print("[3/3] Item 적재 + Arca(gemma4) 정리...")
+    stats = asyncio.run(_ingest_and_score(findings))
 
     print(
         f"\n== 사이클 완료 ==\n"
