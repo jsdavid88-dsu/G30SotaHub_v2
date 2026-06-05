@@ -25,6 +25,9 @@ _URL_RE = re.compile(r"https?://[^\s)\]\"'>}]+")
 _ARXIV_RE = re.compile(r"arxiv\.org/(?:abs|pdf)/(\d{4}\.\d{4,5})(?:v\d+)?", re.I)
 _GITHUB_RE = re.compile(r"github\.com/([\w.\-]+/[\w.\-]+)", re.I)
 _HF_RE = re.compile(r"huggingface\.co/([\w.\-]+/[\w.\-]+)", re.I)
+# openalex/SearXNG 등 학술 엔진 결과 — arxiv/github/hf 가 아닌 논문 식별자.
+_OPENALEX_RE = re.compile(r"openalex\.org/(W\d+)", re.I)
+_DOI_RE = re.compile(r"(?:doi\.org/|\bdoi:\s*)(10\.\d{4,9}/[^\s\"'<>]+)", re.I)
 
 # github.com 의 repo 아닌 경로 (소유자 위치) 제외
 _GH_NOISE = {
@@ -54,6 +57,13 @@ def _url_to_identity(url: str) -> tuple[str, str] | None:
         if path.split("/")[0].lower() in _HF_NOISE:
             return None
         return ("hf", path)
+    # arxiv/github/hf 가 아니면 DOI > openalex 순으로 논문 식별 (openalex 검색결과 대응).
+    m = _DOI_RE.search(url)
+    if m:
+        return ("doi", m.group(1).rstrip("/.").lower())
+    m = _OPENALEX_RE.search(url)
+    if m:
+        return ("openalex", m.group(1))
     return None
 
 
@@ -78,23 +88,60 @@ def extract_findings_from_ldr(result, query: str = "") -> list[dict]:
     summary 는 각 finding 의 abstract 컨텍스트로(Arca 가 점수 매길 근거).
     """
     if isinstance(result, dict):
-        summary = str(result.get("summary") or result.get("report") or result.get("findings") or "")
+        summary = str(result.get("summary") or result.get("report") or "")
         blobs = _gather_strings(result)
     else:
         summary = str(result or "")
         blobs = [summary]
 
+    seen: dict[str, dict] = {}
+    claimed: set[str] = set()  # 같은 논문의 대체 식별자(openalex id ↔ doi 등) — 정규식 폴백 중복 방지.
+
+    # (1순위) 정형 sources[] 직접 사용 — LDR 이 제목/링크/snippet 을 이미 준다.
+    # 구조: {"id": openalex/url, "title": ..., "link": doi/url, "snippet": 초록}.
+    sources = result.get("sources") if isinstance(result, dict) else None
+    if isinstance(sources, list):
+        for s in sources:
+            if not isinstance(s, dict):
+                continue
+            url = s.get("link") or s.get("id") or s.get("url")
+            if not url:
+                continue
+            # 이 소스가 가진 모든 식별자 후보 → 그 중 1순위(link→id→url→snippet)로 적재,
+            # 나머지는 claimed 에 넣어 폴백이 같은 논문을 다른 id 로 또 안 넣게 한다.
+            idents = []
+            for cand in (s.get("link"), s.get("id"), s.get("url"), s.get("snippet")):
+                if cand:
+                    a = _url_to_identity(str(cand))
+                    if a:
+                        idents.append(a)
+            if not idents:
+                continue
+            for a in idents:
+                claimed.add(f"{a[0]}:{a[1]}")
+            ident = idents[0]
+            key = f"{ident[0]}:{ident[1]}"
+            if key in seen:
+                continue
+            seen[key] = {
+                "source": ident[0],
+                "external_id": ident[1],
+                "url": str(url),
+                "title": (s.get("title") or ident[1])[:2000],
+                "abstract": ((s.get("snippet") or summary)[:5000] or None),
+                "query": query,
+            }
+
+    # (2순위) 전체 문자열 재귀 수집 → URL 정규식 — sources 가 없거나 본문에 추가 링크가 박혀있을 때.
     urls: list[str] = []
     for b in blobs:
         urls.extend(_URL_RE.findall(b))
-
-    seen: dict[str, dict] = {}
     for u in urls:
         ident = _url_to_identity(u)
         if not ident:
             continue
         key = f"{ident[0]}:{ident[1]}"
-        if key in seen:
+        if key in seen or key in claimed:
             continue
         seen[key] = {
             "source": ident[0],
@@ -104,7 +151,7 @@ def extract_findings_from_ldr(result, query: str = "") -> list[dict]:
             "abstract": (summary[:1500] or None),
             "query": query,
         }
-    logger.info(f"[deep_research] extracted {len(seen)} findings from {len(urls)} urls")
+    logger.info(f"[deep_research] extracted {len(seen)} findings ({len(sources or [])} structured sources, {len(urls)} urls scanned)")
     return list(seen.values())
 
 
