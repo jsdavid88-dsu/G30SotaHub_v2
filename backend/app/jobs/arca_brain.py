@@ -302,8 +302,17 @@ def _append_instructions(system: str, extra: str | None) -> str:
     )
 
 
-def _build_score_system(categories: list[dict] | None, extra_instructions: str | None = None) -> str:
-    """카테고리 목록을 프롬프트에 주입. categories=[{slug, name_ko}]."""
+def _build_score_system(
+    categories: list[dict] | None,
+    extra_instructions: str | None = None,
+    known_entities: list[str] | None = None,
+) -> str:
+    """카테고리 + 이미 등록된 brand/family 를 프롬프트에 주입.
+
+    known_entities (MemGraphRAG 차용 — entity memory): 이미 그래프에 있는 brand/family 를
+    Arca 에게 알려줘 새 item 을 기존 엔티티에 정렬시킨다 → fragment-level 변종 난립·dangling
+    방지(구축 단계에서 일관성 확보. Lint 가 사후 탐지하던 것을 앞단에서 줄임).
+    """
     if categories:
         lines = []
         for c in categories:
@@ -315,6 +324,15 @@ def _build_score_system(categories: list[dict] | None, extra_instructions: str |
     else:
         category_list = "(카테고리 목록 없음 — 가장 적합한 영문 slug 자유 작성)"
     system = SCORE_SYSTEM_TEMPLATE.format(category_list=category_list)
+
+    if known_entities:
+        ents = "\n".join(f"- {e}" for e in known_entities[:80])
+        system += (
+            "\n\n## 이미 등록된 모델 계열 (표기 일관성 — 중요)\n"
+            "아래는 이미 그래프에 등록된 brand/family 다. 같은 모델·계열이면 **새 변종을 만들지 말고 "
+            "이 표기를 그대로** brand/family 에 사용한다(동일 철자). 목록에 없으면 규칙대로 새로 정규화.\n"
+            + ents
+        )
     return _append_instructions(system, extra_instructions)
 
 
@@ -333,7 +351,10 @@ def _build_score_user(items: list[dict]) -> str:
 
 
 def score_items(
-    items: list[dict], categories: list[dict] | None = None, extra_instructions: str | None = None
+    items: list[dict],
+    categories: list[dict] | None = None,
+    extra_instructions: str | None = None,
+    known_entities: list[str] | None = None,
 ) -> list[dict]:
     """Score items with Gemma4. Returns list of scoring results.
 
@@ -344,7 +365,7 @@ def score_items(
     if not items:
         return []
 
-    system = _build_score_system(categories, extra_instructions)
+    system = _build_score_system(categories, extra_instructions, known_entities)
 
     # 1차: 배치 통째 시도 (Gemma4 thinking 여유분 1800/item)
     raw = _call_gemma(system, _build_score_user(items), temperature=0.3, max_tokens=len(items) * 1800)

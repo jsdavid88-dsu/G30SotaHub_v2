@@ -203,6 +203,22 @@ async def step_score_items() -> dict:
         categories = [{"slug": s, "name_ko": n} for s, n in cat_rows]
         extra = await get_custom_instructions(db)  # 운영자 커스텀 지침
 
+        # MemGraphRAG 차용(entity memory): 이미 등록된 brand/family 를 Arca 에 주입 →
+        # 새 item 을 기존 엔티티에 정렬(fragment-level 변종 난립·dangling 방지).
+        from collections import Counter
+        ent_counter: Counter = Counter()
+        md_rows = (await db.execute(
+            select(Item.item_metadata).where(Item.llm_score > 0).limit(2000)
+        )).all()
+        for (md,) in md_rows:
+            arca = md.get("arca") if isinstance(md, dict) else None
+            if isinstance(arca, dict):
+                for k in ("brand", "family"):
+                    v = arca.get(k)
+                    if isinstance(v, str) and v.strip():
+                        ent_counter[v.strip().lower()] += 1
+        known_entities = [e for e, _ in ent_counter.most_common(80)]
+
         stmt = select(Item).where(Item.llm_score == 0).order_by(
             Item.discovered_at.desc()
         ).limit(50)
@@ -220,7 +236,7 @@ async def step_score_items() -> dict:
             ]
 
             results = await asyncio.get_running_loop().run_in_executor(
-                None, lambda b=batch_dicts: score_items(b, categories, extra)
+                None, lambda b=batch_dicts: score_items(b, categories, extra, known_entities)
             )
 
             for j, result in enumerate(results):
