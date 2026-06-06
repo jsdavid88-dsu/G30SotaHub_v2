@@ -12,16 +12,17 @@
 
 ---
 
-## 🧭 컴팩션 재진입 — 현재 상태 (2026-06-02, HEAD `c4b5e62`)
+## 🧭 컴팩션 재진입 — 현재 상태 (2026-06-05, HEAD `67467d3`)
 
 > 이 블록만 봐도 현재 위치·다음 파악 가능. 상세는 아래 섹션들.
 
 **한 줄**: 연구실 협업(Hub) + 자동 SOTA 추적(VFX/Arca) 통합 R&D Knowledge Graph. Phase 0~2 완료, 온톨로지 wiki tier 가동, Phase 3(그래프 UI) 직전.
 
 ### GitHub 이슈 상태
-- ✅ **CLOSED**: #6 · #14~#20 · **#22**(`2ad809b`: Category PATCH null→422 / Arca 지침 JSON가드(#6 회귀방지) / github topics 폴백) · **#23**(`349e1a5`: crawler 공백 sanitize + Category trim/dedupe)
-- 🟡 **OPEN #7**: github/arxiv 는 5090서 0→87 / 0→14 확인됨. feed 러너 가드 버그(hf_trending·pwc 빈 dict 막던 것) `349e1a5` 로 수정. 잔여=코드 아님(reddit 키·feed yaml). `diagnose.ps1 --full` 로 hf_trending·pwc `0→N` 재확인 후 close 판단
-- 🟡 **OPEN #9**(배포 alembic) · **#11**(Arca→Hermes/LDR 보류) · **#21**(운영 제약)
+- ✅ **CLOSED**: #14~#20 · **#22/#23**(Category null→422 / Arca JSON가드 / crawler 공백·topics sanitize / dedupe)
+- 🟡 **OPEN #6**(재오픈→재수정): score 폴백 unscored 22→0 검증됨. feed_filter 도 동일 폴백 적용(`678f1a2`). `diagnose.ps1 --full` 로 feed_filter 파싱 OK 재확인 후 close
+- 🟡 **OPEN #7**: github/arxiv ✅. reddit→PRAW(`5a70b98`)·pwc 비활성·login channel=chrome. 잔여=운영(reddit `.env` 키) + 5090 재검증 후 close
+- 🟡 **OPEN #9**(배포 alembic) · **#11**(Arca→LDR — **착수**: deep_research 통합 진행중) · **#21**(운영 제약)
 
 ### 🤖 5090 Claude 인계 — 신규: 커뮤니티 스크래퍼 (아카/X 자율수집)
 **무엇**: Reddit/X/아카라이브를 night_batch 자율 소스로 편입. 크롤만 들어오면 기존 Gemma4(filter→score→wiki)가 자동 처리.
@@ -40,14 +41,15 @@
 **리스크**: ⚠️ 아카 DOM 선택자 **미검증(추정)** — 0건이면 1순위 조정. ⚠️ 프로필 락(login 창 닫고 크롤; feed 소스는 순차라 X↔아카 동시충돌 없음). ⚠️ X 는 버너 계정만(실계정 밴).
 
 ### 5090 운영 액션 (git pull 후 — 누적)
-1. `git pull` (HEAD `c4b5e62`)
-2. `cd backend; .\.venv\Scripts\activate; alembic upgrade head` — 미적용 j0a1·k0a1·l0a1 있으면
+1. `git pull` (HEAD `67467d3`)
+2. `cd backend; .\.venv\Scripts\activate; alembic upgrade head` — **j0a1·k0a1·l0a1·m0a1(raw 테이블)** 적용
 3. `python seed_vfx.py` — arxiv cs.* 카테고리
-4. `.env`: `REDDIT_CLIENT_ID/SECRET` + `GITHUB_TOKEN`
+4. `.env`: `REDDIT_CLIENT_ID/SECRET`(reddit PRAW) + `GITHUB_TOKEN` + (LDR 시) `LDR_USERNAME/PASSWORD`
 5. `copy backend\feed_queries.example.yaml backend\feed_queries.yaml` 후 arca/x/reddit 채움
 6. `python login_helper.py` — X(버너)/Reddit/아카 로그인 (위 인계 참조)
 7. `npm --prefix frontend ci` (lockfile)
-8. `.\diagnose.ps1 --full` → 결과 공유
+8. `.\diagnose.ps1 --full` → #6(feed_filter)·#7(reddit) 재확인
+9. **LDR**: `LDR_SETUP.md` 대로 설치 → `python run_deep_research.py "쿼리"` 1사이클 (LDR→Arca→DB)
 
 ### 이번 세션(2026-06-02) 한 것
 - 코드리뷰 #14~20 전부 처리/close
@@ -62,6 +64,14 @@
 - #7 크롤 fix: github 공식API·연산자≤5 / arxiv 429 / HTTP 재시도(`4cc6b8e`/`0bcf753`/`59f9208`)
 - #22(`2ad809b`) + #23(`349e1a5`): CategoryUpdate null→422 / Arca 지침 JSON가드 / github topics·공백 sanitize / Category trim·dedupe / #7 feed 가드(hf·pwc 빈dict 허용)
 - **커뮤니티 스크래퍼**: login_helper(`c62cadd`) + feed_arca·_browser_session 이벤트루프격리(`c4b5e62`) — 아카/X 를 night_batch 자율수집에 편입
+
+### 추가 (2026-06-03~05)
+- #6 재오픈 대응: score 단건 폴백(`5a70b98`) + feed_filter 동일 폴백(`678f1a2`) — thinking-overflow 배치유실 차단 (5090: unscored 22→0 확인)
+- #7: reddit→PRAW(`.env` 키) / login channel=chrome(Cloudflare 통과, 아카 0→15 검증) / pwc 비활성(302 폐기) (`5a70b98`/`678f1a2`)
+- **온톨로지 raw tier + Lint 완성**(`d895236`, migration **m0a1**) — raw🟢/wiki🟢/outputs🟡 · Ingest🟢/Query✅/**Lint🟢**. API `/vfx/ontology/lint`·`/items/{id}/raw`. night_batch 에 raw 스냅샷+Lint 스텝.
+- **LDR(local-deep-research) 통합 착수(#11)**: discovery 스캐폴드+enrich(`5bb3a84`/`946a9a1`) + 어댑터 sources[] 파싱(5090 `6f95337`). `run_deep_research.py`(LDR→Arca→DB 1사이클) + `LDR_SETUP.md`. 분담: LDR 발견 → Arca 정리 → DB.
+- **entity-memory**(`67467d3`, MemGraphRAG[arxiv 2606.00610] 차용): 기존 brand/family 를 score 프롬프트에 주입 → 구축단계 일관성(fragment 변종·dangling 예방). 코드 복붙 X(라이선스·스키마).
+- ⚠️ **미구현(다음)**: Lint/raw/confidence **대시보드 UI 없음**(백엔드만 — 화면 0). (B) reconcile 패스(Lint 모순 탐지→해결)도 미구현.
 
 ### 다음 할 일 (검증과 독립 진행 가능)
 - 🟢 **온톨로지 마저**: raw tier(ModelRawSnapshot 불변원본) + Lint(stale/모순/고아) — 3-tier·3-ops 완성
