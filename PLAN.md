@@ -41,6 +41,7 @@
 **리스크**: ⚠️ 아카 DOM 선택자 **미검증(추정)** — 0건이면 1순위 조정. ⚠️ 프로필 락(login 창 닫고 크롤; feed 소스는 순차라 X↔아카 동시충돌 없음). ⚠️ X 는 버너 계정만(실계정 밴).
 
 ### 5090 운영 액션 (git pull 후 — 누적)
+> 🧪 **검증·이슈 가이드: [VERIFY_5090.md](VERIFY_5090.md)** — 항목별 실행/기대/실패시 이슈 작성법. 5090 은 이거 읽고 검증.
 1. `git pull` (HEAD `67467d3`)
 2. `cd backend; .\.venv\Scripts\activate; alembic upgrade head` — **j0a1·k0a1·l0a1·m0a1(raw 테이블)** 적용
 3. `python seed_vfx.py` — arxiv cs.* 카테고리
