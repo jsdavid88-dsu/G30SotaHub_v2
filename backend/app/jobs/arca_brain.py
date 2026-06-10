@@ -15,6 +15,7 @@ import json
 import logging
 from typing import Any
 
+import httpx
 from openai import OpenAI
 from openai._exceptions import OpenAIError
 
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 # Ollama config — reads from .env or defaults
 OLLAMA_BASE_URL = "http://localhost:11434/v1"
+OLLAMA_NATIVE_CHAT = OLLAMA_BASE_URL.replace("/v1", "") + "/api/chat"  # think 토글용 네이티브 API
 OLLAMA_MODEL = "gemma4:26b"
 OLLAMA_TIMEOUT = 300
 
@@ -60,10 +62,64 @@ def normalize_brand(raw: object) -> str | None:
     return b
 
 
+def _call_gemma_native(
+    system: str, user: str, temperature: float, max_tokens: int, think: bool
+) -> str:
+    """Ollama 네이티브 /api/chat — think 토글이 실제로 먹는 신뢰 경로.
+
+    #6/리서치(2026-06-05): gemma4(26b-a4b)는 OpenAI-compat 의 extra_body think 가 안 먹는
+    알려진 버그 → thinking 이 안 꺼지고 completion 토큰을 다 먹어 content 0. 네이티브
+    /api/chat 의 top-level think=false 는 reasoning 을 신뢰되게 끔(+~5x). 실패/미지원 시
+    "" 반환 → _call_gemma 가 OpenAI-compat 로 폴백.
+    """
+    try:
+        resp = httpx.post(
+            OLLAMA_NATIVE_CHAT,
+            json={
+                "model": OLLAMA_MODEL,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                "stream": False,
+                "think": think,
+                "options": {"temperature": temperature, "num_predict": max_tokens},
+            },
+            timeout=OLLAMA_TIMEOUT,
+        )
+        if resp.status_code != 200:
+            logger.warning(f"Gemma native /api/chat {resp.status_code}: {resp.text[:150]}")
+            return ""
+        data = resp.json()
+        content = (data.get("message") or {}).get("content") or ""
+        logger.info(
+            f"Gemma native: think={think}, prompt_eval={data.get('prompt_eval_count')}, "
+            f"eval={data.get('eval_count')}, content_len={len(content)}"
+        )
+        return content
+    except Exception as e:  # noqa: BLE001 — httpx/JSON 등 다양 → OpenAI 폴백
+        logger.warning(f"Gemma native 실패(OpenAI 폴백): {type(e).__name__}: {e}")
+        return ""
+
+
 def _call_gemma(
     system: str, user: str, temperature: float = 0.2, max_tokens: int = 4000, think: bool = False
 ) -> str:
-    """Low-level Gemma call. Returns raw text response.
+    """Gemma 호출 — 네이티브 /api/chat(신뢰되는 think 토글) 우선, OpenAI-compat 폴백.
+
+    #6 근본대응: think=false 가 실제로 먹어야 reasoning overflow(content 0)가 안 남.
+    네이티브가 빈 응답/실패면 기존 OpenAI-compat 경로로 폴백(무회귀).
+    """
+    content = _call_gemma_native(system, user, temperature, max_tokens, think)
+    if content:
+        return content
+    return _call_gemma_openai(system, user, temperature, max_tokens, think)
+
+
+def _call_gemma_openai(
+    system: str, user: str, temperature: float = 0.2, max_tokens: int = 4000, think: bool = False
+) -> str:
+    """OpenAI-compat 경로 (폴백). Returns raw text response.
 
     Issue #6 (2026-06-01, 5090 실측): gemma4:26b 는 thinking 모델이라 reasoning 이
     completion 토큰을 전부 먹고 content_len=0 (JSON 0바이트)으로 반환 → batch 통째 유실

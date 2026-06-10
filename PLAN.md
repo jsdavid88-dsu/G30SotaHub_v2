@@ -73,6 +73,13 @@
 - **entity-memory**(`67467d3`, MemGraphRAG[arxiv 2606.00610] 차용): 기존 brand/family 를 score 프롬프트에 주입 → 구축단계 일관성(fragment 변종·dangling 예방). 코드 복붙 X(라이선스·스키마).
 - ⚠️ **미구현(다음)**: Lint/raw/confidence **대시보드 UI 없음**(백엔드만 — 화면 0). (B) reconcile 패스(Lint 모순 탐지→해결)도 미구현.
 
+### Gemma 추론 최적화 (2026-06-05 리서치 → 적용)
+gemma4:26b = 26b-a4b(MoE). 상세: Vault `07_Learning/tools-skills/outputs/2026-06-05_gemma-inference-optimization.md`.
+- **🔴 #6 근본원인 규명**: "gemma4 thinking 못 끔"은 알려진 버그(OpenAI-compat `think:false` 무력). → **코드 적용**: `_call_gemma` 가 Ollama **네이티브 `/api/chat` think 토글** 우선 + OpenAI-compat 폴백(무회귀). thinking 실제로 꺼지면 score/filter **~5x** + overflow 소멸 (단건 폴백은 안전망 유지). **5090 검증 필요**(native think 실동작 확인).
+- **5090 env (적용 요망 — 공짜 win)**: `OLLAMA_FLASH_ATTENTION=1` + `OLLAMA_KV_CACHE_TYPE=q8_0` → 속도↑ + KV VRAM −30~50%.
+- **5090 QAT(검토)**: gemma4 QAT int4(~14GB, 품질 유지) → VRAM ~3x↓ → **gemma + Qwen(LDR용) 동시 상주** 가능(LDR 모델 swap 부담 해소). `ollama pull` + 품질 spot-check.
+- #21 정합: 전부 효율(부하↓)이라 전력 친화. 남는 헤드룸으로 동시성 키우는 건 별도 전력 재검증.
+
 ### 다음 할 일 (검증과 독립 진행 가능)
 - 🟢 **온톨로지 마저**: raw tier(ModelRawSnapshot 불변원본) + Lint(stale/모순/고아) — 3-tier·3-ops 완성
 - 🟢 **GraphNode/GraphEdge → Phase 3 그래프 UI** (reactflow 본격)
