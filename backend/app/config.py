@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     ollama_model: str = "gemma4:26b"
 
     # NAS / Storage (Phase 3 영상 첨부)
-    nas_base_path: str = ""  # 예: "M:\\sota_files" — 비어있으면 backend/uploads/ fallback
+    nas_base_path: str = ""  # NAS UNC(\\\\host\\share\\..) 또는 드라이브. 설정 시 storage_base_path 보다 우선. 비면 storage_base_path → backend/uploads/ fallback
 
     # Phase 2.5 — 첨부 storage base.
     # 지금: ./backend/uploads/ (개발). 나중 NAS: M:\sota_files\

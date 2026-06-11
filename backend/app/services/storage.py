@@ -29,15 +29,37 @@ logger = logging.getLogger(__name__)
 # ─── Config ──────────────────────────────────────────────────────────────
 
 
-def get_base_path() -> Path:
-    """STORAGE_BASE_PATH env 변수에서 base 디렉토리 가져옴.
+_BASE_CACHE: Path | None = None
 
-    default = `./backend/uploads/` (개발용).
+
+def get_base_path() -> Path:
+    """storage base 디렉토리.
+
+    우선순위: `NAS_BASE_PATH`(설정 시) → `STORAGE_BASE_PATH` → `./backend/uploads/`.
+    NAS(UNC `\\\\host\\share\\...` 또는 매핑 드라이브)도 그대로 받음 — DB 엔 상대경로만
+    저장하므로 여기(+env)만 바꾸면 NAS 이전 끝.
+
+    resolve()/mkdir 은 NAS 면 네트워크 왕복이라 **1회 캐시**(부팅 후 base 고정). UNC resolve
+    가 네트워크 이슈로 실패하면 정규화 없이 원본 경로 사용(hang/예외 방지). mkdir 실패(NAS
+    미연결) 시엔 캐시하지 않아 다음 호출에 재시도.
     """
+    global _BASE_CACHE
+    if _BASE_CACHE is not None:
+        return _BASE_CACHE
+
     from app.config import settings
-    raw = getattr(settings, "storage_base_path", None) or "./backend/uploads/"
-    p = Path(raw).expanduser().resolve()
+    raw = (
+        (getattr(settings, "nas_base_path", "") or "").strip()
+        or (getattr(settings, "storage_base_path", "") or "").strip()
+        or "./backend/uploads/"
+    )
+    p = Path(raw).expanduser()
+    try:
+        p = p.resolve()
+    except OSError:
+        pass  # UNC/네트워크 resolve 실패 → 원본 경로 그대로 사용
     p.mkdir(parents=True, exist_ok=True)
+    _BASE_CACHE = p
     return p
 
 
