@@ -3,9 +3,11 @@
 // - 영상: <video controls>, range request 자동 활용 (브라우저 native)
 // - ESC 키로 닫기
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { X, PenLine } from 'lucide-react'
 import ImageAnnotator from './ImageAnnotator'
 import VideoAnnotator from './VideoAnnotator'
+import { authMediaUrl } from '../api/media'
 
 export type MediaItem = {
   id: string
@@ -43,8 +45,12 @@ export default function MediaViewer({ item, onClose, annotatable = true }: Props
   if (!item) return null
 
   const canAnnotate = annotatable && (item.media_type === 'image' || item.media_type === 'video')
+  // <img>/<video> 는 Authorization 헤더 불가 → 토큰 쿼리 부착 URL 사용
+  const src = authMediaUrl(item.stream_url) || item.stream_url
 
-  return (
+  // portal → body 직속 렌더. 페이지/모달의 stacking context (sidebar·header·feed 가
+  // z-index 로 위에 그려지던 문제) 에서 탈출 — 풀스크린 lightbox 는 항상 최상위.
+  return createPortal(
     <div
       onClick={onClose}
       style={{
@@ -106,18 +112,18 @@ export default function MediaViewer({ item, onClose, annotatable = true }: Props
             </p>
           </div>
         ) : item.media_type === 'image' && annotate ? (
-          <ImageAnnotator attachmentId={item.id} streamUrl={item.stream_url} fileName={item.file_name} />
+          <ImageAnnotator attachmentId={item.id} streamUrl={src} fileName={item.file_name} />
         ) : item.media_type === 'video' && annotate ? (
-          <VideoAnnotator attachmentId={item.id} streamUrl={item.stream_url} fps={item.fps} />
+          <VideoAnnotator attachmentId={item.id} streamUrl={src} fps={item.fps} />
         ) : item.media_type === 'image' ? (
           <img
-            src={item.stream_url}
+            src={src}
             alt={item.file_name || ''}
             style={{ maxWidth: '95vw', maxHeight: '90vh', objectFit: 'contain', display: 'block' }}
           />
         ) : item.media_type === 'video' ? (
           <video
-            src={item.stream_url}
+            src={src}
             controls
             autoPlay
             style={{ maxWidth: '95vw', maxHeight: '90vh' }}
@@ -128,6 +134,7 @@ export default function MediaViewer({ item, onClose, annotatable = true }: Props
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

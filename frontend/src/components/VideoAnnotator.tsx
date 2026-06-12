@@ -67,15 +67,18 @@ export default function VideoAnnotator({
 
   const pauseVideo = () => { videoRef.current?.pause() }
 
-  // 1프레임씩 앞/뒤 (정밀 프레임 네비). currentTime = n/fps 로 가장 가까운 프레임 seek.
+  // 1프레임씩 앞/뒤 (정밀 프레임 네비).
+  // 경계 시각(n/fps)으로 seek 하면 디코더가 이전 프레임을 보여주는 off-by-one 발생
+  // → 항상 프레임 "중앙"(n+0.5)/fps 으로 seek 해 표시 프레임 = 라벨 프레임 보장.
   const stepFrame = (dir: 1 | -1) => {
     const v = videoRef.current
     if (!v) return
     v.pause()
-    const dt = 1 / effectiveFps
-    v.currentTime = Math.max(0, Math.min(v.duration || 0, v.currentTime + dir * dt))
+    const cur = Math.floor(v.currentTime * effectiveFps + 1e-6)
+    const target = Math.max(0, cur + dir)
+    v.currentTime = Math.min(v.duration || 0, (target + 0.5) / effectiveFps)
   }
-  const currentFrame = Math.round((currentMs / 1000) * effectiveFps)
+  const currentFrame = Math.floor((currentMs / 1000) * effectiveFps + 1e-6)
 
   const onPointerDown = (e: RPE) => {
     if (tool === 'view' || pending) return
@@ -147,9 +150,15 @@ export default function VideoAnnotator({
     setSelectedId(a.id)
     if (videoRef.current && a.timecode_ms != null) {
       videoRef.current.pause()
-      videoRef.current.currentTime = a.timecode_ms / 1000
+      // 저장 시각이 프레임 경계에 가까우면 이전 프레임이 보이는 off-by-one 방지 — 프레임 중앙으로 seek
+      const f = Math.floor((a.timecode_ms / 1000) * effectiveFps + 1e-6)
+      videoRef.current.currentTime = (f + 0.5) / effectiveFps
     }
   }
+
+  // 주석 목록용 라벨 — 프레임 단위 작업이므로 "프레임 N (m:ss)" 로 표기
+  const frameLabel = (ms: number) =>
+    `프레임 ${Math.floor((ms / 1000) * effectiveFps + 1e-6)} (${msLabel(ms)})`
 
   const selected = annotations.find((a) => a.id === selectedId) || null
   const pct = (v: number) => `${v * 100}%`
@@ -266,7 +275,7 @@ export default function VideoAnnotator({
           {durationMs > 0 && annotations.map((a) => {
             if (a.timecode_ms == null) return null
             return (
-              <button key={a.id} title={`${msLabel(a.timecode_ms)} — ${a.body || a.kind}`}
+              <button key={a.id} title={`${frameLabel(a.timecode_ms)} — ${a.body || a.kind}`}
                 onClick={() => selectAnnotation(a)}
                 style={{
                   position: 'absolute', top: 3, left: `${(a.timecode_ms / durationMs) * 100}%`,
@@ -315,7 +324,7 @@ export default function VideoAnnotator({
               <button key={a.id} onClick={() => selectAnnotation(a)}
                 style={{ textAlign: 'left', padding: 10, borderRadius: 8, border: '1px solid #f1f5f9', background: '#f8fafc', cursor: 'pointer' }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: '#0f172a' }}>
-                  {a.timecode_ms != null ? msLabel(a.timecode_ms) : '—'} · {a.kind} · {a.author_name}
+                  {a.timecode_ms != null ? frameLabel(a.timecode_ms) : '—'} · {a.kind} · {a.author_name}
                 </div>
                 {a.body && <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.body}</div>}
                 <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>답글 {a.replies.length}</div>

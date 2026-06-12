@@ -63,6 +63,44 @@ async def get_current_user(
     return user
 
 
+async def get_current_user_media(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    token: str | None = None,
+) -> User:
+    """미디어 서빙(stream/thumbnail) 전용 — Authorization 헤더 또는 ?token= 쿼리.
+
+    <img>/<video src> 는 헤더를 못 보내므로 쿼리 토큰을 허용한다.
+    같은 JWT 를 그대로 검증하며 owner 권한 검사는 호출부(assert_attachment_access)가 수행.
+    내부 연구실 도구 전제 — 토큰이 서버 로그에 남을 수 있는 트레이드오프 감수 (외부 공개 시 쿠키 전환).
+    """
+    raw = credentials.credentials if credentials is not None else token
+    if not raw:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        payload = jwt.decode(raw, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str | None = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token: missing subject")
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    if not settings.DEBUG and user.status != UserStatus.active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is pending approval.")
+    return user
+
+
 async def get_current_user_any_status(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
     db: Annotated[AsyncSession, Depends(get_db)],

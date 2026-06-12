@@ -3,6 +3,7 @@
 // owner_type / owner_id 받음 → 백엔드가 storage 에 저장.
 import { useRef, useState } from 'react'
 import { Paperclip, X, Loader2 } from 'lucide-react'
+import { authMediaUrl } from '../api/media'
 
 export type UploadedAttachment = {
   id: string
@@ -151,7 +152,7 @@ export function AttachmentChip({
     >
       {att.thumbnail_url ? (
         <img
-          src={att.thumbnail_url}
+          src={authMediaUrl(att.thumbnail_url)}
           alt={att.file_name || ''}
           style={{
             width: 44, height: 44, borderRadius: 5,

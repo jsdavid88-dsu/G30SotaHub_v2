@@ -24,7 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, get_current_user_media
 from app.models.attachment import Attachment, AttachmentOwnerType
 from app.models.user import User, UserRole
 from app.services import storage
@@ -282,7 +282,7 @@ async def stream_attachment(
     att_id: uuid.UUID,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(get_current_user_media),  # <video src> 는 헤더 불가 → ?token= 허용
 ):
     """본 파일 streaming. 영상의 경우 Range request 지원 (HTTP 206 Partial Content)."""
     att = await db.get(Attachment, att_id)
@@ -343,7 +343,7 @@ async def stream_attachment(
 async def get_thumbnail(
     att_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(get_current_user_media),  # <img src> 는 헤더 불가 → ?token= 허용
 ):
     """이미지면 본 파일, 영상이면 추출된 썸네일 PNG."""
     att = await db.get(Attachment, att_id)

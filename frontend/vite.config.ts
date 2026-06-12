@@ -36,6 +36,9 @@ export default defineConfig({
     },
     watch: {
       ignored: ['**/.playwright-mcp/**', '**/node_modules/**'],
+      // 네트워크 드라이브(Z: 등)에서 fs.watch 가 UNKNOWN errno -4094 로 죽음 → 폴링으로 우회.
+      // 로컬 디스크(5090)에서는 env 미설정 시 기존 동작 그대로.
+      usePolling: !!process.env.VITE_USE_POLLING,
     },
   },
 })
