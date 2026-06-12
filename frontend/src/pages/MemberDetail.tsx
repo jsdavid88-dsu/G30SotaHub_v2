@@ -71,7 +71,17 @@ type AttendanceStats = {
   present_count?: number
 }
 
-type TabKey = 'overview' | 'tasks' | 'daily' | 'attendance'
+type SotaAssignmentRow = {
+  id: string
+  status: string
+  due_date?: string
+  item_title?: string
+  item_url?: string
+  item_priority?: string
+  reviews?: { id: string; content: string; created_at?: string }[]
+}
+
+type TabKey = 'overview' | 'sota' | 'tasks' | 'daily' | 'attendance'
 
 // ── Constants ──────────────────────────────────────────────
 
@@ -118,6 +128,7 @@ export default function MemberDetail() {
   const [dailyLogs, setDailyLogs] = useState<DailyLog[]>([])
   const [attendanceHistory, setAttendanceHistory] = useState<AttendanceRecord[]>([])
   const [attendanceStats, setAttendanceStats] = useState<AttendanceStats>({})
+  const [assignments, setAssignments] = useState<SotaAssignmentRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabKey>('overview')
@@ -134,6 +145,7 @@ export default function MemberDetail() {
   const visibleTabs = useMemo<{ key: TabKey; label: string }[]>(() => {
     const tabs: { key: TabKey; label: string }[] = [{ key: 'overview', label: '개요' }]
     if (isPrivileged(currentRole) || currentUser?.id === id) {
+      tabs.push({ key: 'sota', label: 'SOTA 배정' })
       tabs.push({ key: 'tasks', label: '태스크' })
       tabs.push({ key: 'daily', label: '데일리' })
       tabs.push({ key: 'attendance', label: '출결' })
@@ -154,7 +166,7 @@ export default function MemberDetail() {
       setError(null)
       try {
         // Fetch user info and advisor relations in parallel
-        const [userRes, advisorRes] = await Promise.all([
+        const [userRes, advisorRes, assignRes] = await Promise.all([
           api.users.get(id).catch(() => null),
           (async () => {
             try {
@@ -168,6 +180,20 @@ export default function MemberDetail() {
               if (res.ok) return await res.json()
             } catch { /* ignore */ }
             return { data: [] }
+          })(),
+          (async () => {
+            // 이 학생이 배정받은 SOTA 모델/논문 (admin/professor or 본인만 — 아니면 403→[])
+            try {
+              const token = localStorage.getItem('token')
+              const res = await fetch(`/api/v1/sota/assignments?assignee_id=${id}`, {
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+              })
+              if (res.ok) return await res.json()
+            } catch { /* ignore */ }
+            return []
           })(),
         ])
 
@@ -192,6 +218,7 @@ export default function MemberDetail() {
         })
 
         setAdvisorRelations(advisorRes?.data || [])
+        setAssignments(Array.isArray(assignRes) ? assignRes : (assignRes?.data || []))
 
         // Fetch projects and find memberships
         try {
@@ -507,6 +534,7 @@ export default function MemberDetail() {
       {/* ── Tab Content ── */}
       <div className="opacity-0 animate-fade-in stagger-2">
         {activeTab === 'overview' && renderOverview()}
+        {activeTab === 'sota' && renderSota()}
         {activeTab === 'tasks' && renderTasks()}
         {activeTab === 'daily' && renderDaily()}
         {activeTab === 'attendance' && renderAttendance()}
@@ -630,6 +658,10 @@ export default function MemberDetail() {
               <p style={{ fontSize: 22, fontWeight: 700, color: '#0f172a' }}>{advisorRelations.length}</p>
               <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>지도 관계</p>
             </div>
+            <div style={{ padding: '14px 16px', borderRadius: 10, background: '#f8fafc', textAlign: 'center' }}>
+              <p style={{ fontSize: 22, fontWeight: 700, color: '#7c3aed' }}>{assignments.length}</p>
+              <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>SOTA 배정</p>
+            </div>
             {userInfo?.last_login_at && (
               <div style={{ padding: '14px 16px', borderRadius: 10, background: '#f8fafc', textAlign: 'center' }}>
                 <p style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>
@@ -648,6 +680,65 @@ export default function MemberDetail() {
             )}
           </div>
         </div>
+      </div>
+    )
+  }
+
+  // ── Tab: SOTA 배정 ──────────────────────────────────────
+
+  function renderSota() {
+    const statusMap: Record<string, { label: string; bg: string; color: string }> = {
+      assigned: { label: '배정됨', bg: '#e0e7ff', color: '#4338ca' },
+      in_review: { label: '검토중', bg: '#fef3c7', color: '#b45309' },
+      reviewing: { label: '검토중', bg: '#fef3c7', color: '#b45309' },
+      in_progress: { label: '진행중', bg: '#e0e7ff', color: '#4338ca' },
+      completed: { label: '완료', bg: '#d1fae5', color: '#047857' },
+      done: { label: '완료', bg: '#d1fae5', color: '#047857' },
+      archived: { label: '보류', bg: '#f1f5f9', color: '#64748b' },
+    }
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {assignments.length === 0 ? (
+          <div style={{ ...cardStyle, padding: 40, textAlign: 'center' }}>
+            <p style={{ color: '#94a3b8', fontSize: 14 }}>배정받은 SOTA 모델·논문이 없습니다.</p>
+          </div>
+        ) : (
+          assignments.map((a) => {
+            const st = statusMap[a.status] || statusMap.assigned
+            const lastReview = a.reviews && a.reviews.length > 0 ? a.reviews[a.reviews.length - 1] : null
+            return (
+              <div key={a.id} style={{ ...cardStyle, padding: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 180 }}>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>{a.item_title || '(제목 없음)'}</p>
+                    <div style={{ display: 'flex', gap: 10, marginTop: 6, flexWrap: 'wrap', alignItems: 'center', fontSize: 11, color: '#94a3b8' }}>
+                      {a.item_priority && (
+                        <span style={{ padding: '2px 8px', borderRadius: 6, background: '#f1f5f9', color: '#475569', fontWeight: 500 }}>{a.item_priority}</span>
+                      )}
+                      {a.due_date && <span>마감 {new Date(a.due_date).toLocaleDateString('ko-KR')}</span>}
+                      <span>리뷰 {a.reviews?.length || 0}건</span>
+                      {a.item_url && (
+                        <a href={a.item_url} target="_blank" rel="noreferrer" style={{ color: '#4f46e5', textDecoration: 'none' }}>원문 ↗</a>
+                      )}
+                    </div>
+                  </div>
+                  <span style={{ padding: '3px 10px', borderRadius: 99, fontSize: 12, fontWeight: 500, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>
+                    {st.label}
+                  </span>
+                </div>
+                {lastReview && (
+                  <p style={{
+                    marginTop: 10, fontSize: 12, color: '#64748b', lineHeight: 1.5,
+                    overflow: 'hidden', textOverflow: 'ellipsis',
+                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any,
+                  }}>
+                    최근 리뷰: {lastReview.content}
+                  </p>
+                )}
+              </div>
+            )
+          })
+        )}
       </div>
     )
   }

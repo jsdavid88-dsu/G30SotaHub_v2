@@ -6,7 +6,7 @@ import { api } from '../api/client'
 import ActiveResearchSection from '../components/ActiveResearchSection'
 
 // ─── Types ───
-type StudentRow = { name: string; type: string; project: string; dailyStatus: string; attendance: string }
+type StudentRow = { id: string; name: string; type: string; project: string; dailyStatus: string; attendance: string }
 type TaskRow = { title: string; project: string; status: '완료' | '진행중' | '미시작'; url: string; guide: string }
 type IssueItem = { student: string; issue: string; time: string; urgent: boolean }
 type MilestoneItem = { title: string; project: string; date: string; daysLeft: number }
@@ -227,6 +227,7 @@ function ProfessorView() {
       // Map students
       const rawStudents: any[] = (apiStudents as any)?.data || []
       setStudents(rawStudents.map((s: any) => ({
+        id: s.id || '',
         name: s.name || '',
         type: '지도학생',
         project: s.major_field || '',
@@ -340,7 +341,8 @@ function ProfessorView() {
             <div>
               {students.map((student, idx) => (
                 <div
-                  key={student.name}
+                  key={student.id || student.name}
+                  onClick={() => { if (student.id) navigate(`/members/${student.id}`) }}
                   style={{
                     padding: '16px 28px',
                     borderBottom: idx < students.length - 1 ? '1px solid #f8fafc' : 'none',
