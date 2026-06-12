@@ -10,6 +10,7 @@ import SourceBadge from "../components/SourceBadge";
 import PriorityBadge from "../components/PriorityBadge";
 import LineageFlow from "../components/LineageFlow";
 import CommentSection from "../components/CommentSection";
+import ResearchLog from "../components/ResearchLog";
 import ArcaPanel, { type ArcaAnalysis } from "../components/ArcaPanel";
 import TriageActions from "../components/TriageActions";
 import AssignModal, { type AssignModalState } from "../components/AssignModal";
@@ -427,6 +428,8 @@ export default function ItemDetail() {
           </div>
         </section>
       )}
+
+      <ResearchLog itemId={item.id} />
 
       <CommentSection itemId={item.id} />
 

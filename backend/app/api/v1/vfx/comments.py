@@ -46,11 +46,18 @@ async def create_comment(
     if not content:
         raise HTTPException(status_code=400, detail="Empty content")
 
+    # 컨펌(승인)은 교수·외부연구원·admin 만 — 학생은 일반 댓글만.
+    kind = payload.kind if payload.kind in ("comment", "confirm") else "comment"
+    if kind == "confirm" and user.role not in (UserRole.admin, UserRole.professor, UserRole.external):
+        raise HTTPException(status_code=403, detail="컨펌은 교수/외부연구원만 가능합니다.")
+
     comment = Comment(
         item_id=item_id,
         user_id=str(user.id),
         user_name=user.name or str(user.email),
         content=content[:4000],
+        kind=kind,
+        user_role=user.role.value if hasattr(user.role, "value") else str(user.role),
     )
     db.add(comment)
     await db.commit()

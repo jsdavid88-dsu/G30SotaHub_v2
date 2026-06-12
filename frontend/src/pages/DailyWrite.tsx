@@ -46,6 +46,7 @@ const SOTA_LIFECYCLE_BADGE: Record<string, { bg: string; color: string; label: s
 interface BlockMeta {
   task_id: string | null
   project_id: string | null
+  sota_item_id: number | null  // 연구 기록 — 이 블록을 연결한 SOTA 모델
   tags: string[]
   image_url: string | null
   image_file?: File | null
@@ -95,7 +96,9 @@ function BlockToolbar({
   meta,
   tasks,
   tasksByProject,
+  models,
   onSetTask,
+  onSetModel,
   onAddTag,
   onRemoveTag,
   onImageUpload,
@@ -104,18 +107,22 @@ function BlockToolbar({
   meta: BlockMeta
   tasks: AssignedTask[]
   tasksByProject: { projectName: string; tasks: AssignedTask[] }[]
+  models: { id: number; title: string }[]
   onSetTask: (taskId: string | null, projectId: string | null) => void
+  onSetModel: (itemId: number | null) => void
   onAddTag: (tag: string) => void
   onRemoveTag: (tag: string) => void
   onImageUpload: (file: File) => void
   onImageRemove: () => void
 }) {
   const [showTask, setShowTask] = useState(false)
+  const [showModel, setShowModel] = useState(false)
   const [showTag, setShowTag] = useState(false)
   const [tagInput, setTagInput] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
   const linkedTask = meta.task_id ? tasks.find(t => t.id === meta.task_id) : null
+  const linkedModel = meta.sota_item_id ? models.find(m => m.id === meta.sota_item_id) : null
 
   const btnStyle = (active: boolean) => ({
     padding: '3px 6px', borderRadius: 5, fontSize: 11, fontWeight: 500 as const,
@@ -187,10 +194,66 @@ function BlockToolbar({
         )}
       </div>
 
+      {/* Model link button — 연구 기록 (이 블록을 SOTA 모델에 연결) */}
+      <div style={{ position: 'relative' }}>
+        <button
+          onClick={(e) => { e.stopPropagation(); setShowModel(!showModel); setShowTask(false); setShowTag(false) }}
+          style={btnStyle(!!meta.sota_item_id)}
+          title="모델(연구) 연결"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+          </svg>
+          {linkedModel && (
+            <span style={{ fontSize: 10, maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {linkedModel.title}
+            </span>
+          )}
+        </button>
+        {showModel && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'absolute', top: '100%', right: 0, zIndex: 20, marginTop: 4,
+              background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: 4, minWidth: 220, maxHeight: 260,
+              overflowY: 'auto' as const,
+            }}
+          >
+            <div
+              onClick={() => { onSetModel(null); setShowModel(false) }}
+              style={{ padding: '5px 10px', fontSize: 12, color: '#94a3b8', cursor: 'pointer', borderRadius: 4 }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#f8fafc' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+            >
+              연결 없음
+            </div>
+            {models.length === 0 && (
+              <div style={{ padding: '6px 10px', fontSize: 11, color: '#cbd5e1' }}>배정받은 모델이 없습니다.</div>
+            )}
+            {models.map(m => (
+              <div
+                key={m.id}
+                onClick={() => { onSetModel(m.id); setShowModel(false) }}
+                style={{
+                  padding: '5px 10px', fontSize: 12, cursor: 'pointer', borderRadius: 4,
+                  color: meta.sota_item_id === m.id ? '#4338ca' : '#1e293b',
+                  fontWeight: meta.sota_item_id === m.id ? 600 : 400,
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = '#f8fafc' }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+              >
+                {m.title}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Tag button */}
       <div style={{ position: 'relative' }}>
         <button
-          onClick={(e) => { e.stopPropagation(); setShowTag(!showTag); setShowTask(false) }}
+          onClick={(e) => { e.stopPropagation(); setShowTag(!showTag); setShowTask(false); setShowModel(false) }}
           style={btnStyle(meta.tags.length > 0)}
           title="태그 추가"
         >
@@ -364,6 +427,7 @@ export default function DailyWrite() {
               restoredMeta[key] = {
                 task_id: b.task_id ? String(b.task_id) : null,
                 project_id: b.project_id ? String(b.project_id) : null,
+                sota_item_id: b.sota_item_id ?? null,
                 tags: (b.tags || []).map((t: any) => t.tag?.name || t.name || '').filter(Boolean),
                 image_url: null,
               }
@@ -542,7 +606,7 @@ export default function DailyWrite() {
 
   // ── Block meta helpers ──
   const getBlockMeta = (key: string): BlockMeta => {
-    return blockMeta[key] || { task_id: null, project_id: null, tags: [], image_url: null }
+    return blockMeta[key] || { task_id: null, project_id: null, sota_item_id: null, tags: [], image_url: null }
   }
 
   const updateBlockMeta = (key: string, updates: Partial<BlockMeta>) => {
@@ -616,6 +680,7 @@ export default function DailyWrite() {
             section: sec.key,
             project_id: meta.project_id || undefined,
             task_id: meta.task_id || undefined,
+            sota_item_id: meta.sota_item_id || undefined,
             visibility,
           })
           blockKeyMap.push({ key, order: blockOrder })
@@ -693,6 +758,15 @@ export default function DailyWrite() {
   if (noProjectTasks.length > 0) {
     tasksByProject.push({ projectName: '프로젝트 없음', tasks: noProjectTasks })
   }
+
+  // 블록에 연결 가능한 모델 — 내가 배정받은 SOTA 모델 (중복 제거)
+  const _modelSeen = new Map<number, string>()
+  for (const a of sotaAssignments) {
+    if (a.sota_item_id && !_modelSeen.has(a.sota_item_id)) {
+      _modelSeen.set(a.sota_item_id, a.item_title || `Item #${a.sota_item_id}`)
+    }
+  }
+  const linkableModels = [..._modelSeen.entries()].map(([id, title]) => ({ id, title }))
 
   const totalTasks = tasks.length
   const doneTasks = Object.values(taskStatuses).filter(s => s === '완료').length
@@ -996,6 +1070,8 @@ export default function DailyWrite() {
                                   meta={meta}
                                   tasks={tasks}
                                   tasksByProject={tasksByProject}
+                                  models={linkableModels}
+                                  onSetModel={(iid) => updateBlockMeta(key, { sota_item_id: iid })}
                                   onSetTask={(tid, pid) => updateBlockMeta(key, { task_id: tid, project_id: pid })}
                                   onAddTag={(tag) => {
                                     const m = getBlockMeta(key)

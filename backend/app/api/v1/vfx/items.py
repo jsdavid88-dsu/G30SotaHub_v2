@@ -18,6 +18,9 @@ from app.constants_vfx import SOURCE_ORDER
 from app.database import get_db
 from app.dependencies import get_current_user, require_role
 from app.models import Category, Item, ItemCategory, User, UserRole
+from app.models.attachment import Attachment
+from app.models.daily import BlockVisibility, DailyBlock, DailyLog
+from app.models.project import ProjectMember
 from app.models.sota import SotaAssignment, SotaAssignmentStatus, SotaReview
 from app.models.vfx_item import ConfidenceStatus, LifecycleStatus
 from app.schemas.vfx.item import ItemRead
@@ -345,3 +348,122 @@ async def generate_item_wiki(
 
     item = await _load_item(db, item_id)
     return serialize_item(item)
+
+
+# ── 연구 기록 피드 (Research Log) ────────────────────────────────────────────
+# 한 모델(Item)에 대한 우리 랩의 연구 활동을 시간순 한 흐름으로:
+#   1) 이 모델에 연결된 데일리 블록 (DailyBlock.sota_item_id) — visibility 존중
+#   2) 이 모델 배정의 SotaReview (학생/외부 리뷰)
+#   3) 이 모델 배정에 올린 테스트 자료 (Attachment owner_type=sota_assignment)
+# 교수/외부의 컨펌·댓글은 별도 ItemComment(연구 피드 아래 토론)로 흐름이 돈다.
+
+def _can_see_block(block: DailyBlock, author_id: uuid.UUID, user: User,
+                   privileged: bool, member_project_ids: set) -> bool:
+    if author_id == user.id or privileged:
+        return True
+    if block.visibility == BlockVisibility.internal:
+        return user.role != UserRole.external  # internal = 학생·교수 (external 제외)
+    if block.visibility == BlockVisibility.project and block.project_id is not None:
+        return block.project_id in member_project_ids
+    return False  # private / advisor → 작성자·운영진만 (위에서 처리됨)
+
+
+@router.get("/{item_id}/research-log")
+async def research_log(
+    item_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """모델별 연구 활동 피드 (데일리 블록 + 리뷰 + 테스트 자료), 시간순 desc."""
+    if not await db.get(Item, item_id):
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    privileged = user.role in (UserRole.admin, UserRole.professor)
+    entries: list[dict] = []
+
+    # 요청자의 프로젝트 멤버십 (project-visibility 블록 판정용) — 1쿼리
+    member_project_ids = set(
+        (await db.execute(
+            select(ProjectMember.project_id).where(ProjectMember.user_id == user.id)
+        )).scalars().all()
+    )
+
+    # 1) 데일리 블록
+    block_rows = (await db.execute(
+        select(DailyBlock, DailyLog.date, DailyLog.author_id, User.name)
+        .join(DailyLog, DailyBlock.daily_log_id == DailyLog.id)
+        .join(User, DailyLog.author_id == User.id)
+        .where(DailyBlock.sota_item_id == item_id)
+    )).all()
+    for block, log_date, author_id, author_name in block_rows:
+        if not _can_see_block(block, author_id, user, privileged, member_project_ids):
+            continue
+        entries.append({
+            "type": "daily",
+            "id": f"block-{block.id}",
+            "author_id": str(author_id),
+            "author_name": author_name,
+            "content": block.content,
+            "section": block.section.value if hasattr(block.section, "value") else str(block.section),
+            "log_date": log_date.isoformat() if log_date else None,
+            "created_at": block.created_at.isoformat() if block.created_at else None,
+        })
+
+    # 이 모델의 배정 ids (리뷰·미디어 범위) + 본인/운영진 가시성
+    asn_rows = (await db.execute(
+        select(SotaAssignment.id, SotaAssignment.assignee_id)
+        .where(SotaAssignment.sota_item_id == item_id)
+    )).all()
+    asn_ids = [aid for aid, _ in asn_rows]
+    asn_owner = {aid: assignee for aid, assignee in asn_rows}
+
+    if asn_ids:
+        # 2) 리뷰 — 운영진 전체, 그 외 본인 배정 것만
+        rev_rows = (await db.execute(
+            select(SotaReview, User.name, SotaAssignment.assignee_id)
+            .join(User, SotaReview.reviewer_id == User.id)
+            .join(SotaAssignment, SotaReview.sota_assignment_id == SotaAssignment.id)
+            .where(SotaReview.sota_assignment_id.in_(asn_ids))
+        )).all()
+        for rev, reviewer_name, assignee_id in rev_rows:
+            if not (privileged or assignee_id == user.id or rev.reviewer_id == user.id):
+                continue
+            entries.append({
+                "type": "review",
+                "id": f"review-{rev.id}",
+                "author_id": str(rev.reviewer_id),
+                "author_name": reviewer_name,
+                "content": rev.content,
+                "created_at": (rev.submitted_at or rev.created_at).isoformat()
+                if (rev.submitted_at or getattr(rev, "created_at", None)) else None,
+            })
+
+        # 3) 테스트 자료 (배정 첨부) — 운영진 전체, 그 외 본인 배정 것만
+        att_rows = (await db.execute(
+            select(Attachment).where(
+                Attachment.owner_type == "sota_assignment",
+                Attachment.owner_id.in_(asn_ids),
+            )
+        )).scalars().all()
+        for att in att_rows:
+            if not (privileged or asn_owner.get(att.owner_id) == user.id or att.created_by == user.id):
+                continue
+            entries.append({
+                "type": "media",
+                "id": f"media-{att.id}",
+                "author_id": str(att.created_by) if att.created_by else None,
+                "author_name": None,
+                "media_type": att.media_type,
+                "file_name": att.file_name,
+                "mime": att.mime,
+                "fps": att.fps,
+                "preview_status": att.preview_status,
+                "attachment_id": str(att.id),
+                "stream_url": f"/api/v1/attachments/{att.id}/stream",
+                "thumbnail_url": f"/api/v1/attachments/{att.id}/thumbnail"
+                if (att.thumbnail_relpath or att.media_type == "image") else None,
+                "created_at": att.created_at.isoformat() if att.created_at else None,
+            })
+
+    entries.sort(key=lambda e: e.get("created_at") or "", reverse=True)
+    return entries

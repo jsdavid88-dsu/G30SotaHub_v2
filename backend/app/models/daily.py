@@ -79,6 +79,11 @@ class DailyBlock(UUIDMixin, TimestampMixin, Base):
     task_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True
     )
+    # 연구 기록 — 이 블록을 특정 SOTA 모델(Item)에 연결. 모델 페이지 "연구 피드"로 모임.
+    # items.id 는 INTEGER (project_id/task_id 와 달리 UUID 아님).
+    sota_item_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("items.id", ondelete="SET NULL"), nullable=True
+    )
     search_vector: Mapped[str | None] = mapped_column(TSVECTOR, nullable=True)
 
     daily_log: Mapped["DailyLog"] = relationship(back_populates="blocks")

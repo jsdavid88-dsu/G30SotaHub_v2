@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict
 
 class CommentCreate(BaseModel):
     content: str
+    kind: str = "comment"  # 'comment' | 'confirm' (컨펌은 교수·외부·admin 만)
 
 
 class CommentRead(BaseModel):
@@ -16,5 +17,7 @@ class CommentRead(BaseModel):
     user_id: str | None
     user_name: str | None
     content: str
+    kind: str = "comment"
+    user_role: str | None = None
     created_at: datetime
     updated_at: datetime

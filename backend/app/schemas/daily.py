@@ -13,6 +13,7 @@ class DailyBlockCreate(BaseModel):
     section: BlockSection = BlockSection.misc
     project_id: uuid.UUID | None = None
     task_id: uuid.UUID | None = None
+    sota_item_id: int | None = None  # 연구 기록 — 이 블록을 SOTA 모델에 연결
     visibility: BlockVisibility = BlockVisibility.internal
 
     model_config = {"extra": "ignore"}
@@ -24,6 +25,7 @@ class DailyBlockUpdate(BaseModel):
     section: BlockSection | None = None
     project_id: uuid.UUID | None = None
     task_id: uuid.UUID | None = None
+    sota_item_id: int | None = None
     visibility: BlockVisibility | None = None
 
 
@@ -49,6 +51,7 @@ class DailyBlockResponse(BaseModel):
     section: BlockSection
     project_id: uuid.UUID | None = None
     task_id: uuid.UUID | None = None
+    sota_item_id: int | None = None
     visibility: BlockVisibility
     tags: list[DailyBlockTagResponse] = Field(default_factory=list)
     created_at: datetime

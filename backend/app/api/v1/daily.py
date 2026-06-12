@@ -342,6 +342,7 @@ async def create_blocks(
             section=block_data.section,
             project_id=block_data.project_id,
             task_id=block_data.task_id,
+            sota_item_id=block_data.sota_item_id,
             visibility=block_data.visibility,
         )
         db.add(block)
