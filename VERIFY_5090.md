@@ -6,6 +6,39 @@
 
 ---
 
+## 📦 2026-06-12 업데이트 — NAS 저장소 연결 (이번 pull 의 5090 액션)
+
+> 직전 정주행(06-11, 5개 이슈 ✅ 코멘트) 잘 받았다 — 그 항목들은 재검증 불필요.
+> 이번 업데이트는 **NAS 저장 1건** + 운영 잔여. 기준: HEAD `856edf1`.
+
+**무엇이 바뀌었나**: `get_base_path()` 가 이제 `NAS_BASE_PATH` 를 **최우선**으로 읽음
+(NAS → STORAGE_BASE_PATH → ./backend/uploads/). David 가 NAS 를 네트워크 드라이브로
+연결해둠. DB 는 상대경로만 저장하므로 env 한 줄로 전환 끝. base 는 1회 캐시(NAS 왕복↓),
+UNC resolve 실패 시 graceful.
+
+**5090 액션 (순서대로):**
+1. `.env` 에 추가 (forward-slash 권장 — dotenv 백슬래시 이스케이프 회피):
+   ```
+   NAS_BASE_PATH=//192.168.131.154/Gibeom/g30_hub_Data
+   ```
+2. 백엔드 재시작 → 부팅 로그에 storage 관련 에러 없는지 확인.
+   (mkdir 실패 = NAS 미연결/권한 문제. 백엔드 실행 계정이 해당 공유에 **쓰기 권한** 있어야 함.
+   서비스 계정이면 매핑드라이브(Z:) 는 안 보일 수 있으니 UNC 직접 사용 — 위 값이 그것.)
+3. **업로드 1회 테스트**: 프로젝트 토론(또는 아무 첨부 지점)에서 이미지 1장 + 영상 1개 업로드 →
+   - NAS 에 `\\192.168.131.154\Gibeom\g30_hub_Data\{owner_type}\2026\06\...` 파일 생성 확인
+   - 웹에서 이미지 표시 / 영상 재생(Range 스트림) / 썸네일 정상 확인
+   - 영상은 `.thumb.png`·(non-web-safe 면) `.web.mp4` 가 NAS 에 같이 생기는지
+4. (선택) 기존 로컬 업로드 이전: `robocopy backend\uploads \\192.168.131.154\Gibeom\g30_hub_Data /E`
+   — DB 는 상대경로라 그대로 동작. 이전 안 하면 기존 파일만 404, 신규는 NAS 에 정상 저장.
+5. **실패 시 → 새 이슈** `[storage] NAS 저장 실패`: 부팅 로그 + 업로드 시 에러 + `whoami` (실행 계정) + NAS 접근 테스트(`Test-Path` 결과).
+
+**운영 잔여 (이전 라운드에서 이월):**
+- `.env` `REDDIT_CLIENT_ID/SECRET` — 넣으면 reddit/feed_reddit 0→N (#7 마지막 조각)
+- `feed_queries.yaml` 의 `x_accounts`/`youtube_channels` 채우기 (원하면)
+- #6 잔여 unscored 2건 — 다음 night_batch 후 수치 확인 (0 또는 유지면 #6 close 의견 코멘트)
+
+---
+
 ## 0. 준비 (git pull 후 1회)
 ```powershell
 git pull                              # 64daae5
