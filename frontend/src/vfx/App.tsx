@@ -17,6 +17,7 @@ const SearchResults = lazy(() => import("./pages/SearchResults"));
 const Feed = lazy(() => import("./pages/Feed"));
 const Submit = lazy(() => import("./pages/Submit"));
 const Triage = lazy(() => import("./pages/Triage"));
+const Ontology = lazy(() => import("./pages/Ontology"));
 
 function PageFallback() {
   return (
@@ -39,6 +40,7 @@ export default function VfxApp() {
         <Route path="submit" element={<Suspense fallback={<PageFallback />}><Submit /></Suspense>} />
         <Route path="triage" element={<Suspense fallback={<PageFallback />}><Triage /></Suspense>} />
         <Route path="search" element={<Suspense fallback={<PageFallback />}><SearchResults /></Suspense>} />
+        <Route path="ontology" element={<Suspense fallback={<PageFallback />}><Ontology /></Suspense>} />
       </Route>
     </Routes>
   );
