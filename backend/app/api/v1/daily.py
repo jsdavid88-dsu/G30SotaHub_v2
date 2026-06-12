@@ -242,9 +242,9 @@ async def list_daily_logs(
 async def create_daily_log(
     body: DailyLogCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.student)),
+    current_user: User = Depends(require_role(UserRole.student, UserRole.professor, UserRole.admin)),
 ):
-    """Create a daily log. Only students can create daily logs."""
+    """Create a daily log. 학생/교수/admin 모두 본인 데일리 작성 가능 (external 제외)."""
     # Check for duplicate date
     existing = await db.execute(
         select(DailyLog).where(
