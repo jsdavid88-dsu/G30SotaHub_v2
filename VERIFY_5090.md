@@ -118,3 +118,25 @@ npm --prefix ..\frontend ci           # lockfile
 
 ## 한 줄 우선순위
 **2(#6) → 3(native think) → 4·5(raw/Lint) → 6(#7 reddit) → 7(LDR) → 8(GPU).** 2·3 이 제일 중요(자율 파이프라인 핵심).
+
+---
+
+## 📦 2026-06-12 업데이트 2차 — 배정 현황판 + 테스트 영상/프레임 노트
+
+pull 후 **반드시 migration**: `cd backend && alembic upgrade head` (→ `n0a1b2c3d4e5`, attachmentownertype 에 'sota_assignment' 추가). 백엔드 재시작 + `npm run build`.
+
+### A. 데일리 403 (3951a48)
+- 교수/admin 계정으로 데일리 작성 → **201** (이전 403).
+
+### B. 배정 현황판 (SOTA 페이지)
+- admin/professor 로 `/sota` → 상단 토글 **[논문 목록 | 배정 현황]**.
+- "배정 현황" = 학생별 그룹: 배정 논문/모델 + 상태 + 마감(지나면 빨강) + 리뷰 수. 행 클릭 → 상세 모달. "학생 상세 →" → MemberDetail.
+- API: `GET /api/v1/sota/assignments?scope=all` (운영진 전용, 학생은 403).
+
+### C. 배정에 테스트 영상 업로드 + 프레임별 노트
+- 학생 계정 `/sota` → 내 배정 카드에 **"테스트 자료"** 섹션 → 이미지/영상 첨부 (owner_type=sota_assignment).
+- 업로드한 영상 클릭 → 뷰어 → **"주석"** 켜면 프레임 ±1 스텝 + 특정 프레임에 핀/박스/자유선 + 코멘트(timecode 노트). 노트 클릭 → 해당 프레임으로 seek.
+- 교수: 상세 모달 배정 행 + MemberDetail "SOTA 배정" 탭에서 같은 자료/노트 열람·업로드.
+- 권한: 배정 본인 + admin/professor 만 (타 학생 403).
+- NAS 연결돼 있으면(`NAS_BASE_PATH`) 업로드 파일이 NAS 에 저장되는지 경로 확인.
+- **실패 시 → 새 이슈** `[sota-media] ...`: 단계(업로드/스트림/주석) + HTTP 코드 + 백엔드 로그. migration 안 돌렸으면 enum 에러 — `alembic upgrade head` 먼저.

@@ -16,6 +16,7 @@ class AttachmentOwnerType(str, enum.Enum):
     project = "project"
     event = "event"
     project_message = "project_message"  # Phase 2.5 — 프로젝트 토론 메시지
+    sota_assignment = "sota_assignment"  # SOTA 배정 — 테스트 영상/이미지 (프레임 노트는 annotation 재사용)
 
 
 class Attachment(UUIDMixin, Base):

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useRole, isPrivileged } from '../contexts/RoleContext'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../api/client'
+import AssignmentMediaSection from '../components/AssignmentMediaSection'
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -735,6 +736,8 @@ export default function MemberDetail() {
                     최근 리뷰: {lastReview.content}
                   </p>
                 )}
+                {/* 테스트 자료 — 업로드된 영상/이미지 + 프레임 노트 (본인·운영진만 업로드/열람 가능) */}
+                <AssignmentMediaSection assignmentId={a.id} canUpload={isPrivileged(currentRole) || currentUser?.id === id} />
               </div>
             )
           })

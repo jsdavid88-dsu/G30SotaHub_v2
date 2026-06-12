@@ -235,25 +235,31 @@ async def list_assignments(
     current_user: User = Depends(get_current_user),
     assignee_id: uuid.UUID | None = Query(None),
     assignment_status: SotaAssignmentStatus | None = Query(None, alias="status"),
+    scope: str | None = Query(None, description="'all' = 전체 배정 현황 (admin/professor 전용)"),
 ):
     """SOTA 배정 목록. assignee_id 지정 시 그 사람 것 — admin/professor 또는 본인만.
+    scope=all 이면 전체 배정 (운영진의 "누구한테 뭐가 배정됐나" 현황판용).
 
     학생 상세(MemberDetail)에서 "이 학생이 배정받은 모델/논문 + 진행상태"를 추적하기 위함.
     (`/my` 는 본인 전용 — 이건 임의 assignee 조회용, 권한 게이트 포함.)
     """
-    target = assignee_id or current_user.id
-    if target != current_user.id and current_user.role not in (UserRole.admin, UserRole.professor):
-        raise HTTPException(status_code=403, detail="타인의 배정을 조회할 권한이 없습니다.")
+    is_privileged = current_user.role in (UserRole.admin, UserRole.professor)
+    if scope == "all":
+        if not is_privileged:
+            raise HTTPException(status_code=403, detail="전체 배정 현황은 운영진 전용입니다.")
+        target = None  # 전체
+    else:
+        target = assignee_id or current_user.id
+        if target != current_user.id and not is_privileged:
+            raise HTTPException(status_code=403, detail="타인의 배정을 조회할 권한이 없습니다.")
 
-    query = (
-        select(SotaAssignment)
-        .options(
-            selectinload(SotaAssignment.assignee),
-            selectinload(SotaAssignment.reviews).selectinload(SotaReview.reviewer),
-            selectinload(SotaAssignment.item),
-        )
-        .where(SotaAssignment.assignee_id == target)
+    query = select(SotaAssignment).options(
+        selectinload(SotaAssignment.assignee),
+        selectinload(SotaAssignment.reviews).selectinload(SotaReview.reviewer),
+        selectinload(SotaAssignment.item),
     )
+    if target is not None:
+        query = query.where(SotaAssignment.assignee_id == target)
     if assignment_status is not None:
         query = query.where(SotaAssignment.status == assignment_status)
     query = query.order_by(SotaAssignment.created_at.desc())

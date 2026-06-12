@@ -9,6 +9,7 @@ owner 리소스의 접근 권한을 검사한다.
   private=작성자·admin / advisor=지도교수(AdvisorRelation) / internal=학생·교수(external 제외) / project=멤버
 - project_message / project: 해당 프로젝트 멤버만 (admin/professor 는 전체)
 - task: task.project_id 의 프로젝트 멤버만
+- sota_assignment: 배정받은 본인(assignee)만 (admin/professor 는 전체) — 테스트 영상/프레임노트
 - event / report_snapshot / 알 수 없는 owner_type: 운영진(admin/professor) 전용
 - admin/professor 는 (daily_block 제외) 전체 허용 — 단 owner 존재 확인 (orphan 404)
 """
@@ -26,6 +27,7 @@ from app.models.event import Event
 from app.models.project import Project
 from app.models.project_message import ProjectMessage
 from app.models.report import ReportSnapshot
+from app.models.sota import SotaAssignment
 from app.models.task import Task
 from app.models.user import User, UserRole
 
@@ -42,6 +44,7 @@ _OWNER_MODELS = {
     "task": Task,
     "event": Event,
     "report_snapshot": ReportSnapshot,
+    "sota_assignment": SotaAssignment,
 }
 
 
@@ -136,6 +139,15 @@ async def assert_owner_access(
             raise HTTPException(status_code=403, detail="이 자료에 접근할 권한이 없습니다")
         await require_project_membership(pid, user, db)
         return
+
+    if ot == "sota_assignment":
+        asn = await db.get(SotaAssignment, owner_id)
+        if asn is None:
+            raise HTTPException(status_code=404, detail="대상 배정을 찾을 수 없습니다")
+        # 배정받은 본인 — 읽기·쓰기 (테스트 영상 업로드 + 프레임 노트)
+        if asn.assignee_id == user.id:
+            return
+        raise HTTPException(status_code=403, detail="이 자료에 접근할 권한이 없습니다")
 
     # event / report_snapshot / 알 수 없는 owner_type — 운영진 전용
     # (admin/professor 는 위에서 통과, 여기 온 건 student/external → 거부)

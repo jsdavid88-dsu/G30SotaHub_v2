@@ -48,7 +48,8 @@ export default function MediaViewer({ item, onClose, annotatable = true }: Props
     <div
       onClick={onClose}
       style={{
-        position: 'fixed', inset: 0, zIndex: 200,
+        // 모달(zIndex 1000~1100) 안에서 열려도 항상 위 — 풀스크린 lightbox 는 최상위
+        position: 'fixed', inset: 0, zIndex: 2000,
         background: 'rgba(15,23,42,0.92)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: 24,

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useRole } from '../contexts/RoleContext'
+import AssignmentMediaSection from '../components/AssignmentMediaSection'
 
 // ── Types ────────────────────────────────────────────────────────────────
 // Phase 1 통합 (2026-05-07): SotaItem.id 가 UUID → int 로 변경됨.
@@ -26,6 +27,10 @@ type SotaAssignment = {
   due_date: string | null
   created_at: string
   reviews: SotaReview[]
+  // scope=all 배정 현황판용 (item nested 필드)
+  item_title?: string | null
+  item_url?: string | null
+  item_priority?: string | null
 }
 
 type SotaItem = {
@@ -108,6 +113,8 @@ const sotaApi = {
     sotaRequest<SotaReview>(`/sota/assignments/${assignmentId}/review`, { method: 'POST', body: JSON.stringify(data) }),
   my: (params?: Record<string, string>) =>
     sotaRequest<SotaAssignment[]>(`/sota/my?${new URLSearchParams(params)}`),
+  allAssignments: () =>
+    sotaRequest<SotaAssignment[]>('/sota/assignments?scope=all'),
   analyze: (id: number) => sotaRequest<any>(`/sota/${id}/analyze`),
   users: (params?: Record<string, string>) =>
     sotaRequest<any>(`/users/?${new URLSearchParams(params)}`),
@@ -188,6 +195,11 @@ export default function Sota() {
   const [reviewForms, setReviewForms] = useState<Record<string, string>>({})
   const [submittingReview, setSubmittingReview] = useState<string | null>(null)
 
+  // 배정 현황판 (professor/admin) — "누구한테 뭐가 배정됐고 어디까지 갔나"
+  const [viewMode, setViewMode] = useState<'items' | 'board'>('items')
+  const [allAssignments, setAllAssignments] = useState<SotaAssignment[]>([])
+  const [boardLoading, setBoardLoading] = useState(false)
+
   // ── Data fetching ──────────────────────────────────────────────────
 
   const fetchItems = useCallback(async () => {
@@ -239,6 +251,24 @@ export default function Sota() {
       fetchItems()
     }
   }, [currentRole, fetchItems, fetchMyAssignments])
+
+  const fetchAllAssignments = useCallback(async () => {
+    setBoardLoading(true)
+    try {
+      const data = await sotaApi.allAssignments()
+      setAllAssignments(Array.isArray(data) ? data : [])
+    } catch {
+      setAllAssignments([])
+    } finally {
+      setBoardLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (viewMode === 'board' && currentRole !== 'student' && currentRole !== 'external') {
+      fetchAllAssignments()
+    }
+  }, [viewMode, currentRole, fetchAllAssignments])
 
   // ── Handlers ───────────────────────────────────────────────────────
 
@@ -535,6 +565,11 @@ export default function Sota() {
                     </div>
                   )}
 
+                  {/* 테스트 자료 — 영상/이미지 업로드 + 프레임별 노트 */}
+                  <div style={{ marginBottom: 16 }}>
+                    <AssignmentMediaSection assignmentId={assignment.id} />
+                  </div>
+
                   {/* Existing reviews */}
                   {assignment.reviews.length > 0 && (
                     <div style={{ marginBottom: 16 }}>
@@ -635,6 +670,24 @@ export default function Sota() {
 
       {/* Search + Filter */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24, flexWrap: 'wrap' }} className="opacity-0 animate-fade-in stagger-1">
+        {/* 뷰 토글 — 논문 중심 vs 사람 중심(배정 현황) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', padding: 4 }}>
+          {([
+            { key: 'items', label: '논문 목록' },
+            { key: 'board', label: '배정 현황' },
+          ] as const).map((v) => (
+            <button key={v.key} onClick={() => setViewMode(v.key)}
+              style={{
+                padding: '6px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                border: 'none', cursor: 'pointer',
+                background: viewMode === v.key ? '#4f46e5' : 'transparent',
+                color: viewMode === v.key ? '#fff' : '#94a3b8',
+                transition: 'all 0.15s',
+              }}>
+              {v.label}
+            </button>
+          ))}
+        </div>
         <div style={{ position: 'relative', flex: '1 1 240px', maxWidth: 360 }}>
           <svg style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', width: 16, height: 16, color: '#94a3b8' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -660,7 +713,8 @@ export default function Sota() {
         </div>
       </div>
 
-      {/* Items List */}
+      {/* Items List / 배정 현황판 */}
+      {viewMode === 'items' ? (<>
       {loading ? (
         <div style={{ padding: 48, textAlign: 'center', color: '#94a3b8' }}>로딩 중...</div>
       ) : items.length === 0 ? (
@@ -730,6 +784,92 @@ export default function Sota() {
       <div style={{ marginTop: 20, padding: '0 4px' }} className="opacity-0 animate-fade-in stagger-3">
         <span style={{ fontSize: 13, color: '#94a3b8' }}>총 {items.length}개 논문 표시</span>
       </div>
+      </>) : (
+      /* ── 배정 현황판 — 학생별 "누가 뭘 배정받아 어디까지" ── */
+      <div className="opacity-0 animate-fade-in stagger-2">
+        {boardLoading ? (
+          <div style={{ padding: 48, textAlign: 'center', color: '#94a3b8' }}>로딩 중...</div>
+        ) : (() => {
+          const q = search.trim().toLowerCase()
+          const filtered = allAssignments.filter((a) =>
+            (!statusFilter || a.status === statusFilter) &&
+            (!q || (a.item_title || '').toLowerCase().includes(q) || a.assignee_name.toLowerCase().includes(q))
+          )
+          if (filtered.length === 0) {
+            return (
+              <div style={{ ...cardStyle, padding: 48, textAlign: 'center' }}>
+                <p style={{ fontSize: 15, color: '#94a3b8' }}>표시할 배정이 없습니다.</p>
+                <p style={{ fontSize: 13, color: '#cbd5e1', marginTop: 8 }}>논문 목록에서 항목을 열고 "학생 배정"을 눌러보세요.</p>
+              </div>
+            )
+          }
+          const groups = new Map<string, { name: string; rows: SotaAssignment[] }>()
+          for (const a of filtered) {
+            const g = groups.get(a.assignee_id) || { name: a.assignee_name, rows: [] }
+            g.rows.push(a)
+            groups.set(a.assignee_id, g)
+          }
+          const today = new Date(); today.setHours(0, 0, 0, 0)
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {[...groups.entries()].map(([uid, g]) => (
+                <div key={uid} style={{ ...cardStyle, padding: '20px 24px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                    <div style={{
+                      width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
+                      background: 'linear-gradient(135deg, #4f46e5, #3730a3)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <span style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>{g.name.charAt(0) || '?'}</span>
+                    </div>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>{g.name}</span>
+                    <span style={{ fontSize: 13, color: '#94a3b8' }}>{g.rows.length}건</span>
+                    <Link to={`/members/${uid}`}
+                      style={{ marginLeft: 'auto', fontSize: 12, color: '#4f46e5', textDecoration: 'none', fontWeight: 500 }}>
+                      학생 상세 →
+                    </Link>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {g.rows.map((a) => {
+                      const overdue = !!a.due_date && a.status !== 'approved' && new Date(a.due_date) < today
+                      return (
+                        <div key={a.id} onClick={() => handleOpenDetail(a.sota_item_id)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                            borderRadius: 10, border: '1px solid #f1f5f9', background: '#f8fafc',
+                            cursor: 'pointer', flexWrap: 'wrap', transition: 'all 0.15s',
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#c7d2fe'; e.currentTarget.style.background = '#fff' }}
+                          onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#f1f5f9'; e.currentTarget.style.background = '#f8fafc' }}>
+                          <span style={{
+                            fontSize: 13, fontWeight: 600, color: '#0f172a', flex: '1 1 240px', minWidth: 0,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>
+                            {a.item_title || `item #${a.sota_item_id}`}
+                          </span>
+                          <StatusBadge status={a.status} />
+                          {a.due_date && (
+                            <span style={{ fontSize: 12, color: overdue ? '#dc2626' : '#94a3b8', fontWeight: overdue ? 700 : 400 }}>
+                              마감 {new Date(a.due_date).toLocaleDateString('ko-KR')}{overdue ? ' (지남)' : ''}
+                            </span>
+                          )}
+                          <span style={{ fontSize: 12, color: '#94a3b8' }}>리뷰 {a.reviews.length}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        })()}
+        {!boardLoading && (
+          <div style={{ marginTop: 20, padding: '0 4px' }}>
+            <span style={{ fontSize: 13, color: '#94a3b8' }}>총 {allAssignments.length}건 배정</span>
+          </div>
+        )}
+      </div>
+      )}
 
       {/* ── Create Modal ──────────────────────────────────────────────── */}
       {showCreateModal && (
@@ -993,6 +1133,9 @@ export default function Sota() {
                           ))}
                         </div>
                       )}
+
+                      {/* 테스트 자료 — 학생이 올린 영상/이미지 + 프레임 노트 확인 (교수도 업로드 가능) */}
+                      <AssignmentMediaSection assignmentId={assignment.id} />
                     </div>
                   ))}
                 </div>
