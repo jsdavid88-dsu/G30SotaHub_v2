@@ -401,6 +401,7 @@ export default function DailyWrite() {
   // Save state
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState('')
+  const [submittedHint, setSubmittedHint] = useState(false)  // 제출 후 "영상은 피드에서" 안내
   const [existingLogId, setExistingLogId] = useState<string | null>(null)
   const [draftIndicator, setDraftIndicator] = useState<string | null>(null)
   const [showDraftRestore, setShowDraftRestore] = useState(false)
@@ -725,6 +726,7 @@ export default function DailyWrite() {
         localStorage.removeItem(DRAFT_STORAGE_KEY)
         setDraftIndicator(null)
         setSaveMessage('제출 완료!')
+        setSubmittedHint(true)  // 영상/프레임노트는 데일리 피드에서 블록에 추가
         setTimeout(() => setSaveMessage(''), 3000)
       } else {
         saveDraftToStorage()
@@ -1098,6 +1100,25 @@ export default function DailyWrite() {
             )
           })}
         </div>
+
+        {/* 제출 후 안내 — 영상/프레임노트는 저장된 블록(데일리 피드)에서 추가 */}
+        {submittedHint && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+            padding: '12px 16px', borderRadius: 10, marginBottom: 12,
+            background: '#eef2ff', border: '1px solid #c7d2fe',
+          }}>
+            <span style={{ fontSize: 13, color: '#3730a3' }}>
+              제출 완료 — 실험 <b>영상·프레임별 노트</b>는 데일리 피드에서 각 블록에 추가할 수 있어요.
+            </span>
+            <a href="/daily/feed" style={{
+              flexShrink: 0, fontSize: 13, fontWeight: 600, color: '#4f46e5',
+              textDecoration: 'none', padding: '6px 12px', borderRadius: 8, background: '#fff', border: '1px solid #c7d2fe',
+            }}>
+              데일리 피드 →
+            </a>
+          </div>
+        )}
 
         {/* ── Action Buttons ── */}
         <div className="opacity-0 animate-fade-in stagger-3" style={{

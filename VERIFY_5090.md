@@ -140,3 +140,38 @@ pull 후 **반드시 migration**: `cd backend && alembic upgrade head` (→ `n0a
 - 권한: 배정 본인 + admin/professor 만 (타 학생 403).
 - NAS 연결돼 있으면(`NAS_BASE_PATH`) 업로드 파일이 NAS 에 저장되는지 경로 확인.
 - **실패 시 → 새 이슈** `[sota-media] ...`: 단계(업로드/스트림/주석) + HTTP 코드 + 백엔드 로그. migration 안 돌렸으면 enum 에러 — `alembic upgrade head` 먼저.
+
+---
+
+## 📦 2026-06-13 업데이트 — 연구 사이클 + 통합 피드 + 알림
+
+pull 후 **반드시**: `cd backend && alembic upgrade head` → 마이그레이션 4개 적용
+(`n0a1` sota_assignment enum, `o0a1` daily_block.sota_item_id + ItemComment.kind,
+`p0a1` notification 연구타입, `q0a1` created_at 동결 디폴트 교정). 백엔드 재시작 + `npm run build`.
+
+### A. 모델별 연구 사이클
+- 학생: DailyWrite 블록 툴바 **"모델 연결"**(육각형) → 내 배정 모델 선택 → 저장.
+- 모델 페이지(`/vfx/item/{id}`) **"연구 기록"** 피드 = 연결된 데일리 + 리뷰 + 테스트자료.
+- 교수/외부: 모델 페이지 댓글창 **"컨펌"**(녹색) + 댓글. 학생은 컨펌 버튼 없음.
+- **실패 시 → 새 이슈** `[research-cycle] ...`: 단계 + HTTP + 로그.
+
+### B. 통합 연구 피드 (`/vfx/research`, 사이드바 "연구 피드")
+- 필터 [전체(운영진)|분야별|학생별]. 모델 라벨 클릭 → 모델 페이지.
+- 데일리(모델연결)+리뷰+테스트영상이 시간순. 외부연구원은 본인 배정 모델 연구만.
+
+### C. 데일리 블록 영상 + 프레임 노트
+- 데일리 피드(`/daily/feed`)에서 날짜 선택 → 내 엔트리 펼치기 → 블록 **"영상/이미지"** 업로드.
+- 영상 열고 "주석" → 프레임 ±1 + timecode 노트. (owner_type=daily_block)
+- 이 영상도 연구 피드/모델 피드에 자동 합류.
+
+### D. 알림 (사이클 자동화)
+- 모델 컨펌/댓글 → 관련자(배정학생∪배정교수), 리뷰 제출 → 배정한 교수. 알림 벨/`/notifications`.
+- **created_at 동결 버그 수정됨** — q0a1 안 돌리면 알림이 옛날 시각으로 박혀 정렬 깨짐.
+
+### E. raw provenance
+- 모델 페이지 **"원본 이력"**(접이식) = 그 모델이 어느 소스/언제 수집됐나 (raw tier).
+
+### 검증 메모
+dev 머신(portable PG16+venv+Playwright)에서 A~E 실스택 E2E 통과:
+컨펌→학생 알림·리뷰→교수 알림 생성, created_at 실시각·최신순, 데일리영상 owner=daily_block 저장,
+통합피드 전체/분야/학생 전환, 외부=본인배정모델만. alembic n0a1~q0a1 클린 통과.

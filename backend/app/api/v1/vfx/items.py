@@ -392,8 +392,13 @@ async def generate_item_wiki(
 # 교수/외부의 컨펌·댓글은 별도 ItemComment(연구 피드 아래 토론)로 흐름이 돈다.
 
 def _can_see_block(block: DailyBlock, author_id: uuid.UUID, user: User,
-                   privileged: bool, member_project_ids: set) -> bool:
+                   privileged: bool, member_project_ids: set,
+                   assigned_item_ids: set) -> bool:
     if author_id == user.id or privileged:
+        return True
+    # 이 블록이 연결된 모델에 내가 배정돼 있으면(협업자) 본다 — 외부연구원이 자신이
+    # 맡은 모델의 연구 데일리를 볼 수 있게 (외부 협업의 핵심). visibility 보다 우선.
+    if block.sota_item_id is not None and block.sota_item_id in assigned_item_ids:
         return True
     if block.visibility == BlockVisibility.internal:
         return user.role != UserRole.external  # internal = 학생·교수 (external 제외)
@@ -443,6 +448,12 @@ async def _build_research_feed(
             select(ProjectMember.project_id).where(ProjectMember.user_id == user.id)
         )).scalars().all()
     )
+    # 내가 배정받은 모델 ids — 외부연구원이 맡은 모델의 연구 데일리를 볼 수 있게.
+    assigned_item_ids = set(
+        (await db.execute(
+            select(SotaAssignment.sota_item_id).where(SotaAssignment.assignee_id == user.id)
+        )).scalars().all()
+    )
 
     # 스코프 → 대상 모델 id 집합 (item / category) 또는 None(student/all)
     item_ids: list[int] | None = None
@@ -470,7 +481,7 @@ async def _build_research_feed(
     visible_block_ids: list[uuid.UUID] = []
     block_author: dict[uuid.UUID, str] = {}
     for block, log_date, author_id, author_name in (await db.execute(bq)).all():
-        if not _can_see_block(block, author_id, user, privileged, member_project_ids):
+        if not _can_see_block(block, author_id, user, privileged, member_project_ids, assigned_item_ids):
             continue
         visible_block_ids.append(block.id)
         block_author[block.id] = author_name
