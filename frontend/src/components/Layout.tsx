@@ -151,14 +151,11 @@ const allNavItems = [
   {
     section: 'VFX SOTA Monitor',
     items: [
+      // 사이드바 비대화 방지 — 대시보드/Triage/피드 3개만. 타임라인·계보·진단은
+      // VFX 대시보드 상단 서브탭(VfxSubNav), 제보하기는 대시보드 버튼으로 이동.
       { path: '/vfx', label: 'VFX 대시보드', icon: SotaIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
       { path: '/vfx/triage', label: 'Triage (분류)', icon: SotaIcon, roles: ['admin', 'professor'] as Role[] },
       { path: '/vfx/feed', label: 'VFX 피드', icon: PublicationsIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
-      { path: '/vfx/research', label: '연구 피드', icon: WeeklyIcon, roles: ['admin', 'professor', 'student'] as Role[] },
-      { path: '/vfx/timeline', label: 'VFX 타임라인', icon: WeeklyIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
-      { path: '/vfx/graph', label: '계보 그래프', icon: ProjectsIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
-      { path: '/vfx/ontology', label: '온톨로지 상태', icon: ReportsIcon, roles: ['admin', 'professor'] as Role[] },
-      { path: '/vfx/submit', label: '제보하기', icon: DailyWriteIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
     ],
   },
 ]

@@ -1,13 +1,54 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Flame, RefreshCw, Bookmark, Globe, Youtube, Twitter, Sparkles, FileText } from "lucide-react";
 import { fetchFeed, triggerFeedCrawl } from "../api/feed";
 import FeedCard from "../components/FeedCard";
+import ResearchFeed from "./ResearchFeed";
 import { pageHeadingStyle, pageSubtitleStyle, cardStyle, btnPrimary } from "../design";
 
 type Tab = "all" | "youtube" | "x" | "hf_paper" | "hf_space" | "paperswithcode" | "crawl4ai" | "reddit" | "saved";
+type FeedMode = "collect" | "research";
 
 export default function Feed() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialMode: FeedMode = searchParams.get("mode") === "research" ? "research" : "collect";
+  const [mode, setMode] = useState<FeedMode>(initialMode);
+
+  const setModeAndUrl = (m: FeedMode) => {
+    setMode(m);
+    setSearchParams(m === "research" ? { mode: "research" } : {}, { replace: true });
+  };
+
+  const modeToggle = (
+    <div style={{ display: "inline-flex", gap: 4, background: "var(--color-surface, #fff)", border: "1px solid var(--color-border, #e2e8f0)", borderRadius: 10, padding: 4, marginBottom: 20 }}>
+      {([["collect", "🛰 수집"], ["research", "🔬 연구"]] as const).map(([m, label]) => (
+        <button key={m} onClick={() => setModeAndUrl(m)}
+          style={{
+            padding: "6px 16px", borderRadius: 7, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer",
+            background: mode === m ? "var(--color-accent, #4f46e5)" : "transparent",
+            color: mode === m ? "#fff" : "var(--color-text-muted, #64748b)",
+          }}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (mode === "research") {
+    return (
+      <div style={{ width: "100%" }}>
+        <h1 style={{ ...pageHeadingStyle, display: "flex", alignItems: "center", gap: 10 }}>VFX 피드</h1>
+        <p style={pageSubtitleStyle}>🛰 수집(Arca 발견) / 🔬 연구(우리 랩 활동)를 한 곳에서.</p>
+        {modeToggle}
+        <ResearchFeed embedded />
+      </div>
+    );
+  }
+  return <CollectFeed modeToggle={modeToggle} />;
+}
+
+function CollectFeed({ modeToggle }: { modeToggle: React.ReactNode }) {
   const [tab, setTab] = useState<Tab>("all");
   const [refreshMsg, setRefreshMsg] = useState<string | null>(null);
   const qc = useQueryClient();
@@ -52,13 +93,13 @@ export default function Feed() {
 
   return (
     <div style={{ width: "100%" }}>
-      <div style={{ marginBottom: 24, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+      <div style={{ marginBottom: 12, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div>
           <h1 style={{ ...pageHeadingStyle, display: "flex", alignItems: "center", gap: 10 }}>
             <Flame style={{ width: 26, height: 26, color: "var(--color-warning)" }} />
-            실전 피드
+            VFX 피드
           </h1>
-          <p style={pageSubtitleStyle}>뉴스, 워크플로우, 튜토리얼, 커뮤니티 논의 · 6시간마다 자동 수집</p>
+          <p style={pageSubtitleStyle}>🛰 수집(Arca 발견) / 🔬 연구(우리 랩 활동)를 한 곳에서.</p>
         </div>
         <button
           onClick={() => crawlMutation.mutate()}
@@ -69,6 +110,8 @@ export default function Feed() {
           지금 수집
         </button>
       </div>
+
+      {modeToggle}
 
       {refreshMsg && (
         <div style={{

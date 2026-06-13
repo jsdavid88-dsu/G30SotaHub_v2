@@ -2,6 +2,7 @@
 // API: POST /api/v1/vfx/ontology/lint (admin/professor). raw provenance 는 ItemDetail 에.
 import { useState } from "react";
 import { isPrivileged, useRole } from "../../contexts/RoleContext";
+import VfxSubNav from "../components/VfxSubNav";
 
 type LintReport = {
   total_items: number;
@@ -59,6 +60,7 @@ export default function Ontology() {
 
   return (
     <div style={{ maxWidth: 1000, margin: "0 auto" }}>
+      <VfxSubNav />
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 8 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--color-text-primary, #0f172a)", margin: 0 }}>온톨로지 상태</h1>

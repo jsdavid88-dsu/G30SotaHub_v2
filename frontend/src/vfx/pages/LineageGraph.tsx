@@ -4,6 +4,7 @@ import { fetchCategories } from "../api/categories";
 import { fetchCategoryLineage } from "../api/lineage";
 import LineageFlow from "../components/LineageFlow";
 import { pageHeadingStyle, pageSubtitleStyle, cardStyle, inputStyle } from "../design";
+import VfxSubNav from "../components/VfxSubNav";
 
 export default function LineageGraph() {
   const [selectedSlug, setSelectedSlug] = useState<string>("");
@@ -16,6 +17,7 @@ export default function LineageGraph() {
 
   return (
     <div style={{ width: "100%" }}>
+      <VfxSubNav />
       <div style={{ marginBottom: 24 }}>
         <h1 style={pageHeadingStyle}>기술 계보</h1>
         <p style={pageSubtitleStyle}>

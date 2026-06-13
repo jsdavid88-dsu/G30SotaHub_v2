@@ -22,6 +22,7 @@ import AssignModal, { type AssignModalState } from "../components/AssignModal";
 import ArcaSettingsPanel from "../components/ArcaSettingsPanel";
 import { useViewMode } from "../utils/viewMode";
 import { dedup } from "../utils/dedup";
+import VfxSubNav from "../components/VfxSubNav";
 
 // ─── Hub design tokens (inline) ───
 const cardStyle: React.CSSProperties = {
@@ -336,6 +337,7 @@ export default function Dashboard() {
 
   return (
     <div style={{ width: "100%" }}>
+      <VfxSubNav />
       {/* Greeting (Hub Dashboard 패턴) */}
       <div style={{ marginBottom: 32, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div>
@@ -351,6 +353,12 @@ export default function Dashboard() {
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Link to="/vfx/submit" style={{
+              display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 14px", borderRadius: 8,
+              fontSize: 13, fontWeight: 600, textDecoration: "none",
+              border: "1px solid var(--color-border, #e2e8f0)", background: "var(--color-surface, #fff)",
+              color: "var(--color-text-secondary, #475569)",
+            }}>＋ 제보하기</Link>
             <span style={{ fontSize: 12, color: "var(--color-text-muted)", fontWeight: 500 }}>뷰</span>
             <ViewToggle />
           </div>

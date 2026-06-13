@@ -21,7 +21,7 @@ function typeMeta(t: string) {
 
 type Student = { id: string; name: string; email: string };
 
-export default function ResearchFeed() {
+export default function ResearchFeed({ embedded = false }: { embedded?: boolean } = {}) {
   const { currentRole } = useRole();
   const privileged = isPrivileged(currentRole);
   const [scope, setScope] = useState<FeedScope>(privileged ? "all" : "student");
@@ -78,11 +78,15 @@ export default function ResearchFeed() {
   });
 
   return (
-    <div style={{ maxWidth: 880, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--color-text-primary, #0f172a)", marginBottom: 4 }}>연구 피드</h1>
-      <p style={{ fontSize: 13, color: "var(--color-text-muted, #64748b)", marginBottom: 16 }}>
-        데일리(모델 연결) · 리뷰 · 테스트 자료를 한 흐름으로. 필터로 전체/분야/학생을 전환.
-      </p>
+    <div style={{ maxWidth: 880, margin: embedded ? "0" : "0 auto" }}>
+      {!embedded && (
+        <>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--color-text-primary, #0f172a)", marginBottom: 4 }}>연구 피드</h1>
+          <p style={{ fontSize: 13, color: "var(--color-text-muted, #64748b)", marginBottom: 16 }}>
+            데일리(모델 연결) · 리뷰 · 테스트 자료를 한 흐름으로. 필터로 전체/분야/학생을 전환.
+          </p>
+        </>
+      )}
 
       {/* 주간 자동 리포트 (outputs tier) */}
       <div style={{

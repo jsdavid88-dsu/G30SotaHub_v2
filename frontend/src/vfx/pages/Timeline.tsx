@@ -4,6 +4,7 @@ import { fetchItems } from "../api/items";
 import ItemCard from "../components/ItemCard";
 import { dedup } from "../utils/dedup";
 import { pageHeadingStyle, pageSubtitleStyle, cardStyle } from "../design";
+import VfxSubNav from "../components/VfxSubNav";
 
 export default function Timeline() {
   const { data: rawItems = [] } = useQuery({
@@ -21,6 +22,7 @@ export default function Timeline() {
 
   return (
     <div style={{ width: "100%" }}>
+      <VfxSubNav />
       <div style={{ marginBottom: 32 }}>
         <h1 style={pageHeadingStyle}>타임라인</h1>
         <p style={pageSubtitleStyle}>발견된 SOTA 이력을 시간순으로 봅니다.</p>
