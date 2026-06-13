@@ -18,6 +18,7 @@ from app.dependencies import get_current_user, require_role
 from app.models.sota import SotaAssignment, SotaAssignmentStatus, SotaReview
 from app.models.user import User, UserRole
 from app.models.vfx_item import Item, ItemCategory, LifecycleStatus
+from app.services.notifications import create_notification
 from app.schemas.sota import (
     SotaAssignmentCreate,
     SotaAssignmentResponse,
@@ -507,6 +508,17 @@ async def submit_review(
         .where(SotaReview.id == review.id)
     )
     review = result.scalar_one()
+
+    # 알림 — 배정한 교수(assigned_by)에게 "리뷰 제출". 본인이 배정자면 생략.
+    if assignment.assigned_by and assignment.assigned_by != current_user.id:
+        item_title = assignment.item.title if assignment.item else "모델"
+        await create_notification(
+            db, assignment.assigned_by, "sota_review",
+            f"{current_user.name or '학생'}님이 '{item_title}' 리뷰를 제출했습니다",
+            body=body.content[:200], target_type="sota_item",
+        )
+        await db.commit()
+
     return _build_review_response(review)
 
 

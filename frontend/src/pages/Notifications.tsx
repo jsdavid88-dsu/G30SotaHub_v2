@@ -27,6 +27,9 @@ const NOTIFICATION_TYPE_ICONS: Record<string, string> = {
   event_reminder: '\u{1F4C5}',
   report_published: '\u{1F4CA}',
   sota_assigned: '\u{1F4D6}',
+  model_comment: '\u{1F4AC}',
+  model_confirm: '\u{2705}',
+  sota_review: '\u{1F4DD}',
 }
 
 const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
@@ -38,6 +41,9 @@ const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
   event_reminder: '일정 알림',
   report_published: '보고서 발행',
   sota_assigned: 'SOTA 배정',
+  model_comment: '모델 댓글',
+  model_confirm: '연구 컨펌',
+  sota_review: '리뷰 제출',
 }
 
 const cardStyle: React.CSSProperties = {

@@ -11,6 +11,7 @@ import PriorityBadge from "../components/PriorityBadge";
 import LineageFlow from "../components/LineageFlow";
 import CommentSection from "../components/CommentSection";
 import ResearchLog from "../components/ResearchLog";
+import RawProvenance from "../components/RawProvenance";
 import ArcaPanel, { type ArcaAnalysis } from "../components/ArcaPanel";
 import TriageActions from "../components/TriageActions";
 import AssignModal, { type AssignModalState } from "../components/AssignModal";
@@ -430,6 +431,8 @@ export default function ItemDetail() {
       )}
 
       <ResearchLog itemId={item.id} />
+
+      <RawProvenance itemId={item.id} />
 
       <CommentSection itemId={item.id} />
 

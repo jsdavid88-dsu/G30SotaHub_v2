@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -83,7 +83,7 @@ class ProjectMember(UUIDMixin, Base):
         Enum(ProjectMemberRole), nullable=False, default=ProjectMemberRole.member
     )
     joined_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default="now()", nullable=False
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
     project: Mapped["Project"] = relationship(back_populates="members")

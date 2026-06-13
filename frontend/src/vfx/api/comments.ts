@@ -46,6 +46,22 @@ export const fetchResearchLog = (itemId: number) =>
 
 export type FeedScope = "all" | "category" | "student" | "item";
 
+export type RawSnapshot = {
+  id: number;
+  source: string | null;
+  external_id: string | null;
+  raw_title: string | null;
+  raw_abstract: string | null;
+  raw_authors: string | null;
+  raw_url: string | null;
+  raw_metadata: Record<string, unknown> | null;
+  content_hash: string | null;
+  fetched_at: string | null;
+};
+
+export const fetchItemRaw = (itemId: number) =>
+  apiGet<RawSnapshot[]>(`/ontology/items/${itemId}/raw`);
+
 export const fetchResearchFeed = (params: {
   scope: FeedScope; category?: string; student_id?: string; item_id?: number;
 }) => {

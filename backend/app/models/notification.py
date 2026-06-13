@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, String
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,6 +19,10 @@ class NotificationType(str, enum.Enum):
     report_published = "report_published"
     sota_assigned = "sota_assigned"
     announcement = "announcement"
+    # 연구 사이클 — 모델 댓글/컨펌, 리뷰 제출
+    model_comment = "model_comment"
+    model_confirm = "model_confirm"
+    sota_review = "sota_review"
 
 
 class Notification(UUIDMixin, Base):
@@ -44,7 +48,7 @@ class Notification(UUIDMixin, Base):
     )
     is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default="now()", nullable=False
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
     user: Mapped["User"] = relationship()

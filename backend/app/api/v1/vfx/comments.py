@@ -12,8 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import ItemComment as Comment, Item
+from app.models.sota import SotaAssignment
 from app.models.user import User, UserRole
 from app.schemas.vfx.comment import CommentCreate, CommentRead
+from app.services.notifications import create_notification
 
 router = APIRouter(prefix="/items/{item_id}/comments", tags=["comments"])
 
@@ -40,7 +42,8 @@ async def create_comment(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    if not await db.get(Item, item_id):
+    item = await db.get(Item, item_id)
+    if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     content = payload.content.strip()
     if not content:
@@ -62,6 +65,33 @@ async def create_comment(
     db.add(comment)
     await db.commit()
     await db.refresh(comment)
+
+    # 알림 — 이 모델 관련자(배정받은 학생 ∪ 배정한 교수)에게, 작성자 본인 제외.
+    related = (await db.execute(
+        select(SotaAssignment.assignee_id, SotaAssignment.assigned_by)
+        .where(SotaAssignment.sota_item_id == item_id)
+    )).all()
+    recipients: set = set()
+    for assignee_id, assigned_by in related:
+        if assignee_id:
+            recipients.add(assignee_id)
+        if assigned_by:
+            recipients.add(assigned_by)
+    recipients.discard(user.id)
+    if recipients:
+        title = (
+            f"{user.name or '운영진'}님이 '{item.title}' 연구를 컨펌했습니다"
+            if kind == "confirm"
+            else f"{user.name or '누군가'}님이 '{item.title}'에 댓글을 남겼습니다"
+        )
+        for uid in recipients:
+            await create_notification(
+                db, uid,
+                "model_confirm" if kind == "confirm" else "model_comment",
+                title, body=content[:200], target_type="sota_item",
+            )
+        await db.commit()
+
     return CommentRead.model_validate(comment)
 
 
