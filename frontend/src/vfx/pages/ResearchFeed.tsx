@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { FileText, MessageSquareText, Film, Image as ImageIcon } from "lucide-react";
-import { fetchResearchFeed, type FeedScope, type ResearchLogEntry } from "../api/comments";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { fetchResearchFeed, fetchWeeklyReport, generateWeeklyReport, type FeedScope, type ResearchLogEntry } from "../api/comments";
 import { fetchCategories } from "../api/categories";
 import { cardStyle } from "../design";
 import MediaViewer, { type MediaItem } from "../../components/MediaViewer";
@@ -30,6 +31,12 @@ export default function ResearchFeed() {
   const [students, setStudents] = useState<Student[]>([]);
 
   const { data: categories = [] } = useQuery({ queryKey: ["vfx-categories"], queryFn: fetchCategories });
+  const qc = useQueryClient();
+  const { data: weekly } = useQuery({ queryKey: ["weekly-report"], queryFn: fetchWeeklyReport });
+  const genWeekly = useMutation({
+    mutationFn: generateWeeklyReport,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["weekly-report"] }),
+  });
 
   // 학생 목록 (운영진만 — 학생 필터용). Hub /users 직접 호출.
   useEffect(() => {
@@ -76,6 +83,43 @@ export default function ResearchFeed() {
       <p style={{ fontSize: 13, color: "var(--color-text-muted, #64748b)", marginBottom: 16 }}>
         데일리(모델 연결) · 리뷰 · 테스트 자료를 한 흐름으로. 필터로 전체/분야/학생을 전환.
       </p>
+
+      {/* 주간 자동 리포트 (outputs tier) */}
+      <div style={{
+        background: "linear-gradient(135deg, #faf5ff, #eef2ff)", border: "1px solid #e9d5ff",
+        borderRadius: 14, padding: 16, marginBottom: 20,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: weekly ? 8 : 0, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#7c3aed" }}>📊 주간 연구 리포트</span>
+          {weekly && <span style={{ fontSize: 11, color: "#94a3b8" }}>{weekly.period_start} ~ {weekly.period_end}</span>}
+          {privileged && (
+            <button onClick={() => genWeekly.mutate()} disabled={genWeekly.isPending}
+              style={{ marginLeft: "auto", fontSize: 12, fontWeight: 600, padding: "5px 12px", borderRadius: 8,
+                border: "1px solid #c4b5fd", background: "#fff", color: "#7c3aed", cursor: "pointer" }}>
+              {genWeekly.isPending ? "Arca 작성 중…" : "이번 주 생성"}
+            </button>
+          )}
+        </div>
+        {weekly ? (
+          <>
+            <p style={{ fontSize: 13, color: "#581c87", lineHeight: 1.6, margin: "0 0 8px", whiteSpace: "pre-wrap" }}>
+              {weekly.content.summary}
+            </p>
+            {weekly.content.totals && (
+              <div style={{ display: "flex", gap: 14, fontSize: 11, color: "#7c3aed", flexWrap: "wrap" }}>
+                <span>신규 모델 {weekly.content.totals.new_models}</span>
+                <span>데일리 {weekly.content.totals.daily_blocks}</span>
+                <span>리뷰 {weekly.content.totals.reviews}</span>
+                <span>컨펌 {weekly.content.totals.confirms}</span>
+              </div>
+            )}
+          </>
+        ) : (
+          <p style={{ fontSize: 12, color: "#a78bda", margin: 0 }}>
+            아직 생성된 주간 리포트가 없습니다. {privileged ? '"이번 주 생성"을 누르거나 매주 월요일 자동 생성됩니다.' : "매주 월요일 자동 생성됩니다."}
+          </p>
+        )}
+      </div>
 
       {/* 필터 */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 20 }}>

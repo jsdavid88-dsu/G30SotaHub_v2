@@ -82,7 +82,7 @@ export default function Ontology() {
 
       {/* 3-tier / 3-ops 상태 */}
       <div style={{ ...card, marginBottom: 20, display: "flex", gap: 24, flexWrap: "wrap", fontSize: 13 }}>
-        <div><b>3-tier</b> &nbsp; raw 🟢 · wiki 🟢 · outputs 🟡(주간리포트 Phase5)</div>
+        <div><b>3-tier</b> &nbsp; raw 🟢 · wiki 🟢 · outputs 🟢(주간 연구 리포트)</div>
         <div><b>3-ops</b> &nbsp; Ingest 🟢 · Query 🟢 · Lint 🟢</div>
       </div>
 

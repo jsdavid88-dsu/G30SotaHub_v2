@@ -44,6 +44,27 @@ export type ResearchLogEntry = {
 export const fetchResearchLog = (itemId: number) =>
   apiGet<ResearchLogEntry[]>(`/items/${itemId}/research-log`);
 
+export type WeeklyReport = {
+  id: string;
+  title: string;
+  period_start: string;
+  period_end: string;
+  created_at: string | null;
+  content: {
+    summary?: string;
+    totals?: { new_models: number; daily_blocks: number; reviews: number; confirms: number };
+    daily_by_student?: { student: string; blocks: number }[];
+    reviews_by_model?: { model: string; reviews: number }[];
+    new_models?: { id: number; title: string }[];
+  };
+};
+
+export const fetchWeeklyReport = () =>
+  apiGet<WeeklyReport | null>(`/items/research-weekly`);
+
+export const generateWeeklyReport = () =>
+  apiPost<WeeklyReport>(`/items/research-weekly/generate`, {});
+
 export type FeedScope = "all" | "category" | "student" | "item";
 
 export type RawSnapshot = {

@@ -4,7 +4,7 @@ ItemRead 응답에 assignments (Hub 학생 배정 정보) 자동 eager-load.
 Triage 워크플로우 (2026-05-07): PATCH /items/{id} + POST /items/{id}/triage.
 """
 import asyncio
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Literal
 import uuid
 
@@ -145,6 +145,43 @@ async def research_feed(
     if not item_id:
         raise HTTPException(status_code=422, detail="item_id 가 필요합니다.")
     return await _build_research_feed(db, user, item_id=item_id)
+
+
+@router.get("/research-weekly")
+async def get_research_weekly(
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """최신 주간 연구 리포트 (outputs tier). 없으면 null."""
+    from app.models.report import ReportSnapshot, ReportType
+    row = (await db.execute(
+        select(ReportSnapshot)
+        .where(ReportSnapshot.report_type == ReportType.organization_summary)
+        .order_by(ReportSnapshot.period_end.desc(), ReportSnapshot.created_at.desc())
+        .limit(1)
+    )).scalar_one_or_none()
+    if not row:
+        return None
+    return {
+        "id": str(row.id), "title": row.title,
+        "period_start": row.period_start.isoformat(), "period_end": row.period_end.isoformat(),
+        "content": row.content, "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+@router.post("/research-weekly/generate")
+async def generate_research_weekly_endpoint(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.admin, UserRole.professor)),
+):
+    """지난 7일 주간 연구 리포트 생성(운영진). Arca 요약 포함(Gemma 연결 시)."""
+    from datetime import timedelta
+    from app.jobs.weekly_report import generate_research_weekly
+    today = datetime.now(timezone.utc).date()
+    period_end = today - timedelta(days=1)
+    period_start = period_end - timedelta(days=6)
+    snap = await generate_research_weekly(db, period_start, period_end, generated_by=user.id)
+    return {"id": str(snap.id), "title": snap.title, "content": snap.content}
 
 
 @router.get("/{item_id}", response_model=ItemRead)

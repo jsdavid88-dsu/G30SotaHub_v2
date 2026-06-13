@@ -21,6 +21,7 @@ from apscheduler.triggers.cron import CronTrigger
 from app.jobs.crawler import crawl_all
 from app.jobs.feed_crawler import crawl_feed_all
 from app.jobs.night_batch import run_night_batch
+from app.jobs.weekly_report import run_weekly_report
 
 logger = logging.getLogger(__name__)
 
@@ -64,9 +65,20 @@ def start_scheduler() -> AsyncIOScheduler:
         coalesce=True,
     )
 
+    # 주간 연구 리포트 — 월요일 08:00 KST (지난 7일 outputs tier 요약)
+    _scheduler.add_job(
+        run_weekly_report,
+        trigger=CronTrigger(day_of_week="mon", hour=8, minute=0),
+        id="weekly_research_report",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
     _scheduler.start()
     logger.info(
-        "Scheduler started — morning crawl: 09:00, feed: 12:00/18:00, night batch: 21:00 KST"
+        "Scheduler started — morning crawl: 09:00, feed: 12:00/18:00, night batch: 21:00, "
+        "weekly report: Mon 08:00 KST"
     )
     return _scheduler
 
