@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef, useId } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useRole, isPrivileged } from '../contexts/RoleContext'
+import MediaSection from '../components/MediaSection'
 import { api } from '../api/client'
 import MiniCalendar from '../components/MiniCalendar'
 import FeedFilterBar, { type FeedFilters } from '../components/FeedFilterBar'
@@ -1229,6 +1230,16 @@ export default function DailyFeed() {
                         )
                       })}
                     </div>
+                  )}
+
+                  {/* 데일리 블록 영상/이미지 + 프레임 노트 (작성자만 업로드, 운영진·열람권자 보기) */}
+                  {block.id && (
+                    <MediaSection
+                      ownerType="daily_block"
+                      ownerId={block.id}
+                      canUpload={!!currentUserId && String(entry.author_id) === String(currentUserId)}
+                      label="영상/이미지"
+                    />
                   )}
 
                   {block.id && <BlockComments blockId={block.id} />}

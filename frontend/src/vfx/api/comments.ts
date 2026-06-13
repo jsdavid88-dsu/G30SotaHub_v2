@@ -27,6 +27,9 @@ export type ResearchLogEntry = {
   section?: string;
   log_date?: string | null;
   created_at: string | null;
+  // 어느 모델 활동인지 (통합 피드에서 표시)
+  item_id?: number | null;
+  item_title?: string | null;
   // media
   media_type?: string;
   file_name?: string | null;
@@ -40,3 +43,15 @@ export type ResearchLogEntry = {
 
 export const fetchResearchLog = (itemId: number) =>
   apiGet<ResearchLogEntry[]>(`/items/${itemId}/research-log`);
+
+export type FeedScope = "all" | "category" | "student" | "item";
+
+export const fetchResearchFeed = (params: {
+  scope: FeedScope; category?: string; student_id?: string; item_id?: number;
+}) => {
+  const qs = new URLSearchParams({ scope: params.scope });
+  if (params.category) qs.set("category", params.category);
+  if (params.student_id) qs.set("student_id", params.student_id);
+  if (params.item_id != null) qs.set("item_id", String(params.item_id));
+  return apiGet<ResearchLogEntry[]>(`/items/research-feed?${qs.toString()}`);
+};

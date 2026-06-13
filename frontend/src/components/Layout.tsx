@@ -154,6 +154,7 @@ const allNavItems = [
       { path: '/vfx', label: 'VFX 대시보드', icon: SotaIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
       { path: '/vfx/triage', label: 'Triage (분류)', icon: SotaIcon, roles: ['admin', 'professor'] as Role[] },
       { path: '/vfx/feed', label: 'VFX 피드', icon: PublicationsIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
+      { path: '/vfx/research', label: '연구 피드', icon: WeeklyIcon, roles: ['admin', 'professor', 'student'] as Role[] },
       { path: '/vfx/timeline', label: 'VFX 타임라인', icon: WeeklyIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
       { path: '/vfx/graph', label: '계보 그래프', icon: ProjectsIcon, roles: ['admin', 'professor', 'student', 'external'] as Role[] },
       { path: '/vfx/ontology', label: '온톨로지 상태', icon: ReportsIcon, roles: ['admin', 'professor'] as Role[] },

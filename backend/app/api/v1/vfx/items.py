@@ -113,6 +113,40 @@ async def list_items(
     return [serialize_item(i) for i in items]
 
 
+@router.get("/research-feed")
+async def research_feed(
+    scope: Literal["all", "category", "student", "item"] = Query("all"),
+    category: str | None = Query(None, description="scope=category 일 때 분야 slug"),
+    student_id: uuid.UUID | None = Query(None, description="scope=student 일 때 학생 id"),
+    item_id: int | None = Query(None, description="scope=item 일 때 모델 id"),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """통합 연구 피드 — 전체/분야별/학생별/모델별 필터로 연구 활동을 한 흐름으로.
+
+    scope=all 은 운영진(admin/professor) 전용(전 랩 활동). 나머지는 가시성 필터로 안전.
+    경로 충돌 회피 위해 /{item_id} 보다 먼저 정의 (빌더는 파일 끝, 호출 시점 해석).
+    """
+    privileged = user.role in (UserRole.admin, UserRole.professor)
+    if scope == "all":
+        if not privileged:
+            raise HTTPException(status_code=403, detail="전체 연구 피드는 운영진 전용입니다.")
+        return await _build_research_feed(db, user)
+    if scope == "category":
+        if not category:
+            raise HTTPException(status_code=422, detail="category(분야 slug) 가 필요합니다.")
+        return await _build_research_feed(db, user, category_slug=category)
+    if scope == "student":
+        if not student_id:
+            raise HTTPException(status_code=422, detail="student_id 가 필요합니다.")
+        if not privileged and student_id != user.id:
+            raise HTTPException(status_code=403, detail="타인의 연구 피드는 운영진만 볼 수 있습니다.")
+        return await _build_research_feed(db, user, student_id=student_id)
+    if not item_id:
+        raise HTTPException(status_code=422, detail="item_id 가 필요합니다.")
+    return await _build_research_feed(db, user, item_id=item_id)
+
+
 @router.get("/{item_id}", response_model=ItemRead)
 async def get_item(
     item_id: int,
@@ -368,36 +402,80 @@ def _can_see_block(block: DailyBlock, author_id: uuid.UUID, user: User,
     return False  # private / advisor → 작성자·운영진만 (위에서 처리됨)
 
 
-@router.get("/{item_id}/research-log")
-async def research_log(
-    item_id: int,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
-    """모델별 연구 활동 피드 (데일리 블록 + 리뷰 + 테스트 자료), 시간순 desc."""
-    if not await db.get(Item, item_id):
-        raise HTTPException(status_code=404, detail="Item not found")
+def _media_entry(att: Attachment, author_name: str | None = None) -> dict:
+    return {
+        "type": "media",
+        "id": f"media-{att.id}",
+        "author_id": str(att.created_by) if att.created_by else None,
+        "author_name": author_name,
+        "media_type": att.media_type,
+        "file_name": att.file_name,
+        "mime": att.mime,
+        "fps": att.fps,
+        "preview_status": att.preview_status,
+        "attachment_id": str(att.id),
+        "stream_url": f"/api/v1/attachments/{att.id}/stream",
+        "thumbnail_url": f"/api/v1/attachments/{att.id}/thumbnail"
+        if (att.thumbnail_relpath or att.media_type == "image") else None,
+        "created_at": att.created_at.isoformat() if att.created_at else None,
+    }
 
+
+async def _build_research_feed(
+    db: AsyncSession,
+    user: User,
+    *,
+    item_id: int | None = None,
+    category_slug: str | None = None,
+    student_id: uuid.UUID | None = None,
+) -> list[dict]:
+    """연구 활동 피드 빌더 — 스코프(모델/분야/학생/전체)별로 데일리 블록 + 리뷰 +
+    테스트 자료(배정·데일리 첨부) 를 시간순 병합. visibility/역할 가시성 존중.
+
+    데일리 블록은 항상 모델 연결(sota_item_id) 된 것만 — '연구' 기록이므로.
+    """
     privileged = user.role in (UserRole.admin, UserRole.professor)
     entries: list[dict] = []
+    referenced_item_ids: set[int] = set()
 
-    # 요청자의 프로젝트 멤버십 (project-visibility 블록 판정용) — 1쿼리
     member_project_ids = set(
         (await db.execute(
             select(ProjectMember.project_id).where(ProjectMember.user_id == user.id)
         )).scalars().all()
     )
 
-    # 1) 데일리 블록
-    block_rows = (await db.execute(
+    # 스코프 → 대상 모델 id 집합 (item / category) 또는 None(student/all)
+    item_ids: list[int] | None = None
+    if item_id is not None:
+        item_ids = [item_id]
+    elif category_slug is not None:
+        item_ids = list((await db.execute(
+            select(ItemCategory.item_id).join(Category, ItemCategory.category_id == Category.id)
+            .where(Category.slug == category_slug)
+        )).scalars().all())
+        if not item_ids:
+            item_ids = [-1]  # 매칭 모델 없음 → 빈 결과
+
+    # ── 1) 데일리 블록 (모델 연결된 것) ──
+    bq = (
         select(DailyBlock, DailyLog.date, DailyLog.author_id, User.name)
         .join(DailyLog, DailyBlock.daily_log_id == DailyLog.id)
         .join(User, DailyLog.author_id == User.id)
-        .where(DailyBlock.sota_item_id == item_id)
-    )).all()
-    for block, log_date, author_id, author_name in block_rows:
+        .where(DailyBlock.sota_item_id.isnot(None))
+    )
+    if item_ids is not None:
+        bq = bq.where(DailyBlock.sota_item_id.in_(item_ids))
+    if student_id is not None:
+        bq = bq.where(DailyLog.author_id == student_id)
+    visible_block_ids: list[uuid.UUID] = []
+    block_author: dict[uuid.UUID, str] = {}
+    for block, log_date, author_id, author_name in (await db.execute(bq)).all():
         if not _can_see_block(block, author_id, user, privileged, member_project_ids):
             continue
+        visible_block_ids.append(block.id)
+        block_author[block.id] = author_name
+        if block.sota_item_id:
+            referenced_item_ids.add(block.sota_item_id)
         entries.append({
             "type": "daily",
             "id": f"block-{block.id}",
@@ -405,40 +483,61 @@ async def research_log(
             "author_name": author_name,
             "content": block.content,
             "section": block.section.value if hasattr(block.section, "value") else str(block.section),
+            "item_id": block.sota_item_id,
             "log_date": log_date.isoformat() if log_date else None,
             "created_at": block.created_at.isoformat() if block.created_at else None,
         })
 
-    # 이 모델의 배정 ids (리뷰·미디어 범위) + 본인/운영진 가시성
-    asn_rows = (await db.execute(
-        select(SotaAssignment.id, SotaAssignment.assignee_id)
-        .where(SotaAssignment.sota_item_id == item_id)
-    )).all()
-    asn_ids = [aid for aid, _ in asn_rows]
-    asn_owner = {aid: assignee for aid, assignee in asn_rows}
+    # ── 데일리 블록 첨부(영상/이미지) — 보이는 블록만 ──
+    if visible_block_ids:
+        block_ids_str = [str(b) for b in visible_block_ids]
+        datt = (await db.execute(
+            select(Attachment).where(
+                Attachment.owner_type == "daily_block",
+                Attachment.owner_id.in_(visible_block_ids),
+            )
+        )).scalars().all()
+        for att in datt:
+            e = _media_entry(att, block_author.get(att.owner_id))
+            entries.append(e)
+        _ = block_ids_str  # noqa
+
+    # ── 배정 스코프 (리뷰 + 테스트 자료) ──
+    aq = select(SotaAssignment.id, SotaAssignment.assignee_id, SotaAssignment.sota_item_id)
+    if item_ids is not None:
+        aq = aq.where(SotaAssignment.sota_item_id.in_(item_ids))
+    if student_id is not None:
+        aq = aq.where(SotaAssignment.assignee_id == student_id)
+    asn_rows = (await db.execute(aq)).all()
+    asn_ids = [r[0] for r in asn_rows]
+    asn_owner = {r[0]: r[1] for r in asn_rows}
+    asn_item = {r[0]: r[2] for r in asn_rows}
 
     if asn_ids:
-        # 2) 리뷰 — 운영진 전체, 그 외 본인 배정 것만
+        # 2) 리뷰 — 운영진 전체, 그 외 본인 배정/본인 작성만
         rev_rows = (await db.execute(
-            select(SotaReview, User.name, SotaAssignment.assignee_id)
+            select(SotaReview, User.name, SotaAssignment.assignee_id, SotaAssignment.sota_item_id)
             .join(User, SotaReview.reviewer_id == User.id)
             .join(SotaAssignment, SotaReview.sota_assignment_id == SotaAssignment.id)
             .where(SotaReview.sota_assignment_id.in_(asn_ids))
         )).all()
-        for rev, reviewer_name, assignee_id in rev_rows:
+        for rev, reviewer_name, assignee_id, sota_item in rev_rows:
             if not (privileged or assignee_id == user.id or rev.reviewer_id == user.id):
                 continue
+            if sota_item:
+                referenced_item_ids.add(sota_item)
             entries.append({
                 "type": "review",
                 "id": f"review-{rev.id}",
                 "author_id": str(rev.reviewer_id),
                 "author_name": reviewer_name,
                 "content": rev.content,
+                "item_id": sota_item,
                 "created_at": (rev.submitted_at or rev.created_at).isoformat()
                 if (rev.submitted_at or getattr(rev, "created_at", None)) else None,
             })
 
-        # 3) 테스트 자료 (배정 첨부) — 운영진 전체, 그 외 본인 배정 것만
+        # 3) 테스트 자료 (배정 첨부) — 운영진 전체, 그 외 본인 배정/업로더만
         att_rows = (await db.execute(
             select(Attachment).where(
                 Attachment.owner_type == "sota_assignment",
@@ -448,22 +547,34 @@ async def research_log(
         for att in att_rows:
             if not (privileged or asn_owner.get(att.owner_id) == user.id or att.created_by == user.id):
                 continue
-            entries.append({
-                "type": "media",
-                "id": f"media-{att.id}",
-                "author_id": str(att.created_by) if att.created_by else None,
-                "author_name": None,
-                "media_type": att.media_type,
-                "file_name": att.file_name,
-                "mime": att.mime,
-                "fps": att.fps,
-                "preview_status": att.preview_status,
-                "attachment_id": str(att.id),
-                "stream_url": f"/api/v1/attachments/{att.id}/stream",
-                "thumbnail_url": f"/api/v1/attachments/{att.id}/thumbnail"
-                if (att.thumbnail_relpath or att.media_type == "image") else None,
-                "created_at": att.created_at.isoformat() if att.created_at else None,
-            })
+            sota_item = asn_item.get(att.owner_id)
+            if sota_item:
+                referenced_item_ids.add(sota_item)
+            e = _media_entry(att)
+            e["item_id"] = sota_item
+            entries.append(e)
+
+    # 모델 제목 라벨 부착 (어느 모델 활동인지)
+    if referenced_item_ids:
+        titles = dict((await db.execute(
+            select(Item.id, Item.title).where(Item.id.in_(referenced_item_ids))
+        )).all())
+        for e in entries:
+            iid = e.get("item_id")
+            if iid is not None:
+                e["item_title"] = titles.get(iid)
 
     entries.sort(key=lambda e: e.get("created_at") or "", reverse=True)
     return entries
+
+
+@router.get("/{item_id}/research-log")
+async def research_log(
+    item_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """모델별 연구 활동 피드 (데일리 블록 + 리뷰 + 테스트 자료), 시간순 desc."""
+    if not await db.get(Item, item_id):
+        raise HTTPException(status_code=404, detail="Item not found")
+    return await _build_research_feed(db, user, item_id=item_id)
