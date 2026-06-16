@@ -85,8 +85,10 @@ class Settings(BaseSettings):
     # on 이면 run_night_batch 가 LDR 발견 → raw 스냅샷 → 기존 스코어링으로 자동 흡수.
     # GPU 순차는 night_batch 가 단계 순서로 보장(gemma 동시상주 X).
     ldr_in_nightbatch: bool = False
-    # 야간배치 LDR 질의 (쉼표구분). 비면 기본 1개 질의.
+    # 야간배치 LDR 질의 (쉼표구분) — 큐 빌더의 'config' 소스. 분야자동+dangling+수동큐와 합쳐짐.
     ldr_nightbatch_queries: str = "latest state-of-the-art text-to-video and image-to-video diffusion models 2026"
+    # 한 야간 LDR 질의 상한 (GPU 보호 — 분야 19개+dangling+수동 다 돌면 과부하).
+    ldr_nightbatch_max_queries: int = 6
 
     model_config = {"env_file": _ENV_FILE, "extra": "ignore"}
 

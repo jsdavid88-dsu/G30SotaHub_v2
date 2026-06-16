@@ -44,9 +44,16 @@ python run_deep_research.py "latest text-to-video diffusion models 2026"
 
 ## 4-b) 야간배치 자동 통합 (#11, 권장 운영)
 `LDR_IN_NIGHTBATCH=true` + creds 설정 후 "야간 배치" 실행(또는 21:00 스케줄)이면,
-`run_night_batch` **step 0.7** 에서 `LDR_NIGHTBATCH_QUERIES` 의 각 질의를 LDR 로 발견 →
-ingest → 이어지는 step3 가 스코어링. 토글 off 거나 LDR 미설치/creds 없으면 **그 단계만
-조용히 skip**(야간배치 나머지는 정상). GPU 는 단계 순차라 gemma 와 동시 점유 없음(#21).
+`run_night_batch` **step 0.7** 이 **큐를 조립**해 LDR 로 발견 → ingest → step3 스코어링.
+토글 off 거나 LDR 미설치/creds 없으면 **그 단계만 조용히 skip**. GPU 는 단계 순차(#21).
+
+### 큐(무엇을 찾을지) — 4개 소스 합성, 우선순위 순, `LDR_NIGHTBATCH_MAX_QUERIES`(기본 6) 상한
+1. **수동 큐** (최우선) — 진단 페이지(`/vfx/ontology`) "LDR 연구 큐" 패널에서 토픽 추가/토글/삭제. active 면 매 야간 반복.
+2. **Lint dangling** — 언급됐지만 DB에 없는 모델 → 구멍 메우기.
+3. **분야 자동** — VFX 카테고리(name_en)로 `latest SOTA {분야} 2026` 자동 생성.
+4. **config static** — `LDR_NIGHTBATCH_QUERIES`(.env, 쉼표구분) 남는 슬롯.
+
+진단 패널 "오늘 질의 미리보기"로 실제 합성 결과 확인 가능. 상한↑ 원하면 `.env LDR_NIGHTBATCH_MAX_QUERIES`.
 
 ## 5) 결과 공유 (dev 가 어댑터 확정)
 - 콘솔의 `result keys:` + `findings=N`

@@ -328,3 +328,59 @@ async def run_ldr_discovery(queries: list[str]) -> list[dict]:
     if not findings:
         return []
     return enrich_findings(findings)
+
+
+async def build_nightbatch_queries(db) -> tuple[list[str], list]:
+    """야간 LDR 질의 조립 (#11): 수동큐(active) > dangling(구멍) > 분야자동 > config static.
+    dedup + cap(ldr_nightbatch_max_queries). 반환 (queries, used_manual_rows).
+    used_manual_rows 는 호출측이 last_run_at/run_count 갱신.
+    """
+    from sqlalchemy import select
+
+    from app.config import settings
+    from app.models import Category, LdrResearchQuery
+
+    cap = max(1, settings.ldr_nightbatch_max_queries)
+    queries: list[str] = []
+    seen: set[str] = set()
+
+    def _add(q: str) -> bool:
+        q = (q or "").strip()
+        k = q.lower()
+        if not q or k in seen or len(queries) >= cap:
+            return False
+        seen.add(k)
+        queries.append(q)
+        return True
+
+    # 1) 수동 큐 (active) — 명시 의도 최우선
+    manual_rows = (await db.execute(
+        select(LdrResearchQuery)
+        .where(LdrResearchQuery.active.is_(True))
+        .order_by(LdrResearchQuery.created_at.desc())
+    )).scalars().all()
+    used_manual = [r for r in manual_rows if _add(r.query)]
+
+    # 2) dangling (Lint, auto_tag off — 읽기전용) → 구멍 난 모델 메우기
+    if len(queries) < cap:
+        try:
+            from app.jobs.lint import run_lint
+            rep = await run_lint(auto_tag_stale=False)
+            for s in rep.get("dangling_wikilinks", {}).get("samples", []):
+                for t in s.get("terms", []):
+                    _add(f"{t} AI model latest 2026")
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"[ldr-queue] dangling 수집 실패(무시): {type(e).__name__}: {e}")
+
+    # 3) 분야 자동 (name_en — LDR 영어 검색 적합)
+    if len(queries) < cap:
+        cats = (await db.execute(select(Category).order_by(Category.display_order))).scalars().all()
+        for c in cats:
+            _add(f"latest SOTA {c.name_en} 2026")
+
+    # 4) config static (남는 슬롯)
+    if len(queries) < cap:
+        for q in (settings.ldr_nightbatch_queries or "").split(","):
+            _add(q)
+
+    return queries, used_manual

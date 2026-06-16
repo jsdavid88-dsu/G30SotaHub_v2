@@ -476,21 +476,36 @@ async def step_ldr_discovery() -> dict:
     이어지는 step_score_items(step 3) 가 Arca/Gemma 로 정리(스코어/사유/태그).
     GPU 순차는 night_batch 단계 순서로 보장 (gemma 동시상주 X).
     """
+    from datetime import datetime, timezone
+
     from app.config import settings
     if not settings.ldr_in_nightbatch:
         return {"step": "ldr_discovery", "skipped": True}
-    queries = [q.strip() for q in (settings.ldr_nightbatch_queries or "").split(",") if q.strip()]
-    if not queries:
-        return {"step": "ldr_discovery", "skipped": True, "reason": "no queries"}
     try:
-        from app.jobs.deep_research import ingest_findings, run_ldr_discovery
-        findings = await run_ldr_discovery(queries)
-        if not findings:
-            logger.info("[night] ldr: 발견 0건 (미설치/creds/빈결과 — skip)")
-            return {"step": "ldr_discovery", "findings": 0, "ingested_new": 0}
-        ing = await ingest_findings(findings)
-        logger.info(f"[night] ldr: findings={len(findings)}, ingested_new={ing['ingested_new']}")
-        return {"step": "ldr_discovery", "findings": len(findings), **ing}
+        from app.database import SessionLocal
+        from app.jobs.deep_research import build_nightbatch_queries, ingest_findings, run_ldr_discovery
+        # 큐 조립: 수동 + dangling + 분야자동 + config (deep_research.build_nightbatch_queries)
+        async with SessionLocal() as qdb:
+            queries, used_manual = await build_nightbatch_queries(qdb)
+            if not queries:
+                return {"step": "ldr_discovery", "skipped": True, "reason": "no queries"}
+            findings = await run_ldr_discovery(queries)
+            ing = {"ingested_new": 0, "candidates": 0}
+            if findings:
+                ing = await ingest_findings(findings)
+            # 수동 큐 실행 통계 갱신 (발견 성공 여부와 무관히 '돌았음' 기록)
+            now = datetime.now(timezone.utc)
+            for r in used_manual:
+                row = await qdb.get(type(r), r.id)
+                if row:
+                    row.last_run_at = now
+                    row.run_count = (row.run_count or 0) + 1
+            await qdb.commit()
+        logger.info(
+            f"[night] ldr: queries={len(queries)} (manual {len(used_manual)}), "
+            f"findings={len(findings)}, ingested_new={ing['ingested_new']}"
+        )
+        return {"step": "ldr_discovery", "queries": len(queries), "findings": len(findings), **ing}
     except Exception as e:
         logger.exception("[night] ldr discovery failed")
         return {"step": "ldr_discovery", "error": str(e)}

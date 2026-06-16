@@ -9,6 +9,7 @@ from app.api.v1.vfx import (
     comments as vfx_comments,
     feed as vfx_feed,
     items as vfx_items,
+    ldr as vfx_ldr,
     lineage as vfx_lineage,
     ontology as vfx_ontology,
     search as vfx_search,
@@ -52,6 +53,7 @@ api_router.include_router(vfx_search.router, prefix="/vfx", tags=["vfx-search"])
 api_router.include_router(vfx_stats.router, prefix="/vfx", tags=["vfx-stats"])
 api_router.include_router(vfx_lineage.router, prefix="/vfx", tags=["vfx-lineage"])
 api_router.include_router(vfx_ontology.router, prefix="/vfx", tags=["vfx-ontology"])
+api_router.include_router(vfx_ldr.router, prefix="/vfx", tags=["vfx-ldr"])
 api_router.include_router(vfx_feed.router, prefix="/vfx", tags=["vfx-feed"])
 api_router.include_router(vfx_submissions.router, prefix="/vfx", tags=["vfx-submissions"])
 api_router.include_router(vfx_tags.router, prefix="/vfx", tags=["vfx-tags"])

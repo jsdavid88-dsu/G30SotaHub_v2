@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { isPrivileged, useRole } from "../../contexts/RoleContext";
 import VfxSubNav from "../components/VfxSubNav";
+import LdrQueuePanel from "../components/LdrQueuePanel";
 
 type LintReport = {
   total_items: number;
@@ -87,6 +88,9 @@ export default function Ontology() {
         <div><b>3-tier</b> &nbsp; raw 🟢 · wiki 🟢 · outputs 🟢(주간 연구 리포트)</div>
         <div><b>3-ops</b> &nbsp; Ingest 🟢 · Query 🟢 · Lint 🟢</div>
       </div>
+
+      {/* LDR 연구 큐 (야간 발견 입력) — 운영진만 */}
+      {canRun && <LdrQueuePanel />}
 
       {!canRun && (
         <div style={{ ...card, color: "var(--color-text-muted, #94a3b8)", fontSize: 13 }}>

@@ -32,6 +32,7 @@ from app.models.vfx_feed_item import FeedItem
 from app.models.vfx_submission import Submission
 from app.models.vfx_category_suggestion import CategorySuggestion
 from app.models.vfx_arca_setting import ArcaSetting
+from app.models.ldr_research_query import LdrResearchQuery
 
 __all__ = [
     "Base",
@@ -84,4 +85,5 @@ __all__ = [
     "Submission",
     "CategorySuggestion",
     "ArcaSetting",
+    "LdrResearchQuery",
 ]
