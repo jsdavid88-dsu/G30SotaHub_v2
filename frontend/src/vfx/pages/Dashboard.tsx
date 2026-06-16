@@ -23,6 +23,7 @@ import ArcaSettingsPanel from "../components/ArcaSettingsPanel";
 import { useViewMode } from "../utils/viewMode";
 import { dedup } from "../utils/dedup";
 import VfxSubNav from "../components/VfxSubNav";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 
 // ─── Hub design tokens (inline) ───
 const cardStyle: React.CSSProperties = {
@@ -299,6 +300,7 @@ export default function Dashboard() {
   const [addOpen, setAddOpen] = useState(false);
   const [viewMode] = useViewMode();
   const [assignModal, setAssignModal] = useState<AssignModalState>(null);
+  const mobile = useMediaQuery("(max-width: 640px)");  // 모바일: 분야 가로 스크롤
 
   const refreshItems = () => qc.invalidateQueries({ queryKey: ["items"] });
 
@@ -442,16 +444,30 @@ export default function Dashboard() {
             카테고리 추가
           </button>
         </div>
-        <div style={{
-          padding: "20px 28px",
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-          gap: 12,
-        }}>
-          {sortedCategories.map((cat) => (
-            <CategoryCard key={cat.slug} cat={cat} onDelete={onDelete} />
-          ))}
-        </div>
+        {/* 모바일: 세로로 분야 19개 쌓이면 스크롤 길어짐 → 가로 스크롤 한 줄 */}
+        {mobile ? (
+          <div style={{
+            padding: "16px 16px", display: "flex", gap: 10, overflowX: "auto",
+            WebkitOverflowScrolling: "touch", scrollSnapType: "x proximity",
+          }}>
+            {sortedCategories.map((cat) => (
+              <div key={cat.slug} style={{ flex: "0 0 150px", width: 150, scrollSnapAlign: "start" }}>
+                <CategoryCard cat={cat} onDelete={onDelete} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{
+            padding: "20px 28px",
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+            gap: 12,
+          }}>
+            {sortedCategories.map((cat) => (
+              <CategoryCard key={cat.slug} cat={cat} onDelete={onDelete} />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 빈 상태 */}

@@ -27,6 +27,7 @@ export default function ResearchFeed({ embedded = false }: { embedded?: boolean 
   const [scope, setScope] = useState<FeedScope>(privileged ? "all" : "student");
   const [category, setCategory] = useState<string>("");
   const [studentId, setStudentId] = useState<string>("");
+  const [contentKind, setContentKind] = useState<"all" | "media">("all");  // 전체 vs 자료(영상/이미지)만
   const [viewer, setViewer] = useState<MediaItem | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
 
@@ -65,6 +66,9 @@ export default function ResearchFeed({ embedded = false }: { embedded?: boolean 
     queryFn: () => fetchResearchFeed(queryParams),
     enabled: enabled && enabledStudent,
   });
+
+  // 콘텐츠 종류 필터 — '자료만'이면 영상/이미지(type=media)만
+  const visibleEntries = contentKind === "media" ? entries.filter((e) => e.type === "media") : entries;
 
   const toMedia = (e: ResearchLogEntry): MediaItem => ({
     id: e.attachment_id || e.id, media_type: e.media_type || "other", mime: e.mime,
@@ -145,6 +149,18 @@ export default function ResearchFeed({ embedded = false }: { embedded?: boolean 
             {students.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         )}
+
+        {/* 콘텐츠 종류 — 전체 vs 자료(영상/이미지)만 갤러리 */}
+        <div style={{ marginLeft: "auto", display: "inline-flex", gap: 4, background: "#fff", border: "1px solid var(--color-border, #e2e8f0)", borderRadius: 8, padding: 3 }}>
+          {([["all", "전체"], ["media", "🎬 자료만"]] as const).map(([k, label]) => (
+            <button key={k} onClick={() => setContentKind(k)}
+              style={{ padding: "5px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer",
+                background: contentKind === k ? "var(--color-accent, #4f46e5)" : "transparent",
+                color: contentKind === k ? "#fff" : "var(--color-text-muted, #64748b)" }}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* 피드 */}
@@ -154,13 +170,43 @@ export default function ResearchFeed({ embedded = false }: { embedded?: boolean 
         </div>
       ) : isLoading ? (
         <p style={{ fontSize: 13, color: "var(--color-text-muted, #94a3b8)" }}>불러오는 중…</p>
-      ) : entries.length === 0 ? (
+      ) : visibleEntries.length === 0 ? (
         <div style={{ ...cardStyle, padding: 32, textAlign: "center", color: "var(--color-text-muted, #94a3b8)", fontSize: 13 }}>
-          이 범위에는 아직 연구 활동이 없습니다.
+          {contentKind === "media" ? "이 범위에 올라온 영상/이미지 자료가 없습니다." : "이 범위에는 아직 연구 활동이 없습니다."}
+        </div>
+      ) : contentKind === "media" ? (
+        /* 자료만 — 영상/이미지 갤러리 그리드 */
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
+          {visibleEntries.map((e) => (
+            <button key={e.id} onClick={() => setViewer(toMedia(e))}
+              style={{ textAlign: "left", padding: 0, borderRadius: 12, overflow: "hidden", cursor: "pointer",
+                border: "1px solid var(--color-border, #e2e8f0)", background: "#fff" }}>
+              <div style={{ position: "relative", width: "100%", aspectRatio: "4 / 3", background: "#e2e8f0" }}>
+                {e.thumbnail_url ? (
+                  <img src={authMediaUrl(e.thumbnail_url)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                ) : (
+                  <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {e.media_type === "video" ? <Film style={{ width: 30, height: 30, color: "#94a3b8" }} /> : <ImageIcon style={{ width: 30, height: 30, color: "#94a3b8" }} />}
+                  </span>
+                )}
+                {e.media_type === "video" && (
+                  <span style={{ position: "absolute", top: 6, right: 6, fontSize: 10, fontWeight: 700, color: "#fff", background: "rgba(15,23,42,0.7)", padding: "2px 6px", borderRadius: 99 }}>▶ 영상</span>
+                )}
+              </div>
+              <div style={{ padding: "8px 10px" }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-primary, #0f172a)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {e.file_name || "미디어"}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--color-text-muted, #94a3b8)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {e.author_name || "—"}{e.item_title ? ` · ${e.item_title}` : ""}
+                </div>
+              </div>
+            </button>
+          ))}
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {entries.map((e) => {
+          {visibleEntries.map((e) => {
             const m = typeMeta(e.type);
             return (
               <div key={e.id} style={{ ...cardStyle, padding: "12px 16px", borderLeft: `3px solid ${m.color}` }}>
