@@ -273,3 +273,58 @@ async def ingest_findings(findings: list[dict]) -> dict:
         await db.commit()
     logger.info(f"[deep_research] ingested new={new}/{len(findings)}")
     return {"ingested_new": new, "candidates": len(findings)}
+
+
+# ── LDR 발견 (#11) — 야간배치 통합용 공용 진입점 ────────────────────────────
+# LDR 은 여기서도 **지연 import** (모듈 top 은 LDR-free 불변 유지).
+# run_night_batch step 0.7 + 수동 스크립트 양쪽이 쓸 수 있는 단일 경로.
+def _call_ldr(query: str):
+    """LDR quick_summary 호출 (sync/blocking). 미설치·creds 없음·실패 시 None (로그만)."""
+    from app.config import settings
+    user, pw = settings.ldr_username, settings.ldr_password
+    if not user or not pw:
+        logger.warning("[ldr] LDR_USERNAME/PASSWORD 없음 — 발견 skip (.env 확인)")
+        return None
+    try:
+        from local_deep_research.api import quick_summary
+        from local_deep_research.settings import SettingsManager
+        from local_deep_research.database.session_context import get_user_db_session
+    except ImportError as e:
+        logger.warning(f"[ldr] 미설치 — 발견 skip: {e}")
+        return None
+    try:
+        with get_user_db_session(username=user, password=pw) as session:
+            snapshot = SettingsManager(session).get_all_settings()
+        return quick_summary(
+            query=query,
+            settings_snapshot=snapshot,
+            iterations=settings.ldr_iterations,
+            questions_per_iteration=settings.ldr_questions_per_iteration,
+        )
+    except Exception as e:  # noqa: BLE001 — LDR 내부 예외 종류 다양
+        logger.warning(f"[ldr] 실행 실패 — skip: {type(e).__name__}: {e}")
+        return None
+
+
+async def run_ldr_discovery(queries: list[str]) -> list[dict]:
+    """질의들 → LDR 발견 → findings(중복제거+enrich). 미설치/실패면 []. GPU 순차는 호출측 보장.
+
+    quick_summary 는 blocking(GPU 추론) → to_thread 로 이벤트루프 비블록.
+    """
+    import asyncio
+
+    merged: dict[str, dict] = {}
+    for q in (queries or []):
+        q = (q or "").strip()
+        if not q:
+            continue
+        result = await asyncio.to_thread(_call_ldr, q)
+        if result is None:
+            continue
+        for f in extract_findings_from_ldr(result, q):
+            key = f"{f.get('source')}:{f.get('external_id')}"
+            merged.setdefault(key, f)  # 질의 간 중복 제거
+    findings = list(merged.values())
+    if not findings:
+        return []
+    return enrich_findings(findings)

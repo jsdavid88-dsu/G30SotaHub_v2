@@ -469,6 +469,33 @@ async def step_crawl_all_sources() -> dict:
         return {"step": "crawl", "error": str(e)}
 
 
+async def step_ldr_discovery() -> dict:
+    """Step 0.7 (#11): LDR 발견 → findings ingest. 토글 ldr_in_nightbatch off 면 skip.
+
+    LDR(별도 설치)이 agentic 탐색 → 소스 URL 추출 → Item(llm_score=0) 적재.
+    이어지는 step_score_items(step 3) 가 Arca/Gemma 로 정리(스코어/사유/태그).
+    GPU 순차는 night_batch 단계 순서로 보장 (gemma 동시상주 X).
+    """
+    from app.config import settings
+    if not settings.ldr_in_nightbatch:
+        return {"step": "ldr_discovery", "skipped": True}
+    queries = [q.strip() for q in (settings.ldr_nightbatch_queries or "").split(",") if q.strip()]
+    if not queries:
+        return {"step": "ldr_discovery", "skipped": True, "reason": "no queries"}
+    try:
+        from app.jobs.deep_research import ingest_findings, run_ldr_discovery
+        findings = await run_ldr_discovery(queries)
+        if not findings:
+            logger.info("[night] ldr: 발견 0건 (미설치/creds/빈결과 — skip)")
+            return {"step": "ldr_discovery", "findings": 0, "ingested_new": 0}
+        ing = await ingest_findings(findings)
+        logger.info(f"[night] ldr: findings={len(findings)}, ingested_new={ing['ingested_new']}")
+        return {"step": "ldr_discovery", "findings": len(findings), **ing}
+    except Exception as e:
+        logger.exception("[night] ldr discovery failed")
+        return {"step": "ldr_discovery", "error": str(e)}
+
+
 async def run_night_batch() -> list[dict]:
     """Full night batch pipeline with Gemma4 brain.
 
@@ -500,6 +527,13 @@ async def run_night_batch() -> list[dict]:
         logger.exception("[night] raw snapshot failed")
         rr = {"step": "raw_snapshot", "error": str(e)}
     results.append(rr)
+
+    # Step 0.7: LDR 발견 (#11, 토글 ldr_in_nightbatch) — 발견 → ingest → step3 가 스코어
+    run_state.update(stage="LDR 발견 (deep research)", progress=0.19)
+    rl = await step_ldr_discovery()
+    results.append(rl)
+    if not rl.get("skipped"):
+        run_state.update(detail=f"LDR: {rl.get('ingested_new', 0)} 신규 발견", progress=0.20)
 
     # Step 1: Submissions
     run_state.update(stage="1/7 제보 처리 (Crawl4AI)", progress=0.20)

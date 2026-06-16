@@ -75,12 +75,18 @@ class Settings(BaseSettings):
     # CORS 추가 (VFX 프론트가 별도 포트에서 도는 경우 대비, 기본은 Hub 와 동일)
     cors_extra_origins: list[str] = []
 
-    # Local Deep Research (LDR) — agentic 발견 엔진 (별도 설치, run_deep_research.py 가 호출)
+    # Local Deep Research (LDR) — agentic 발견 엔진 (별도 설치).
     # LDR 은 자체 user DB 가 있어 settings_snapshot 조회에 계정 필요.
     ldr_username: str = ""
     ldr_password: str = ""
     ldr_iterations: int = 2
     ldr_questions_per_iteration: int = 3
+    # 야간배치에 LDR 발견 단계(step 0.7) 통합 토글 (#11). 기본 off — 5090에서 .env 로 켬.
+    # on 이면 run_night_batch 가 LDR 발견 → raw 스냅샷 → 기존 스코어링으로 자동 흡수.
+    # GPU 순차는 night_batch 가 단계 순서로 보장(gemma 동시상주 X).
+    ldr_in_nightbatch: bool = False
+    # 야간배치 LDR 질의 (쉼표구분). 비면 기본 1개 질의.
+    ldr_nightbatch_queries: str = "latest state-of-the-art text-to-video and image-to-video diffusion models 2026"
 
     model_config = {"env_file": _ENV_FILE, "extra": "ignore"}
 
