@@ -338,6 +338,7 @@ async def build_nightbatch_queries(db) -> tuple[list[str], list]:
     from sqlalchemy import select
 
     from app.config import settings
+    from app.constants_vfx import PRIORITY_CATEGORY_SLUGS
     from app.models import Category, LdrResearchQuery
 
     cap = max(1, settings.ldr_nightbatch_max_queries)
@@ -361,7 +362,19 @@ async def build_nightbatch_queries(db) -> tuple[list[str], list]:
     )).scalars().all()
     used_manual = [r for r in manual_rows if _add(r.query)]
 
-    # 2) dangling (Lint, auto_tag off — 읽기전용) → 구멍 난 모델 메우기
+    # 2) 우선 분야 자동 (생성/편집) — 사용자 지정 최우선 추적 분야.
+    #    이 분야 신모델은 대부분 closed(Ideogram/Bernini/Nano Banana…) → arxiv/github 부적합,
+    #    LDR 웹탐색으로만 발견. display_order 상 11/12/20/21 이라 일반 분야자동(아래 4)+cap 으로는
+    #    영영 큐에 못 들어옴 → dangling 보다도 앞세워 cap 안에 반드시 포함시킨다.
+    if len(queries) < cap:
+        rank = {s: i for i, s in enumerate(PRIORITY_CATEGORY_SLUGS)}
+        prio_rows = (await db.execute(
+            select(Category).where(Category.slug.in_(PRIORITY_CATEGORY_SLUGS))
+        )).scalars().all()
+        for c in sorted(prio_rows, key=lambda c: rank.get(c.slug, 99)):
+            _add(f"latest SOTA {c.name_en} 2026")
+
+    # 3) dangling (Lint, auto_tag off — 읽기전용) → 구멍 난 모델 메우기
     if len(queries) < cap:
         try:
             from app.jobs.lint import run_lint
@@ -372,13 +385,13 @@ async def build_nightbatch_queries(db) -> tuple[list[str], list]:
         except Exception as e:  # noqa: BLE001
             logger.warning(f"[ldr-queue] dangling 수집 실패(무시): {type(e).__name__}: {e}")
 
-    # 3) 분야 자동 (name_en — LDR 영어 검색 적합)
+    # 4) 나머지 분야 자동 (name_en — LDR 영어 검색 적합). 우선분야는 위 2)에서 추가됨 → dedup skip.
     if len(queries) < cap:
         cats = (await db.execute(select(Category).order_by(Category.display_order))).scalars().all()
         for c in cats:
             _add(f"latest SOTA {c.name_en} 2026")
 
-    # 4) config static (남는 슬롯)
+    # 5) config static (남는 슬롯)
     if len(queries) < cap:
         for q in (settings.ldr_nightbatch_queries or "").split(","):
             _add(q)
