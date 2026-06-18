@@ -10,6 +10,13 @@ import FilterPanel from "../components/FilterPanel";
 import ViewToggle from "../components/ViewToggle";
 import AssignModal, { type AssignModalState } from "../components/AssignModal";
 import CategoryKeywordsEditor from "../components/CategoryKeywordsEditor";
+
+// 관련도 낮음 — Arca 가 1~4점으로 매긴 항목(엉뚱하게 긁힌 것). 0=미분류는 펜딩이라 제외(보임).
+const LOW_SCORE_MAX = 4;
+const isLowRelevance = (it: { llm_score?: number }) => {
+  const s = it.llm_score ?? 0;
+  return s >= 1 && s <= LOW_SCORE_MAX;
+};
 import { useViewMode } from "../utils/viewMode";
 import { dedup } from "../utils/dedup";
 import { cardStyle, sectionHeaderStyle, sectionTitleStyle, badgeStyle, btnGhost } from "../design";
@@ -34,6 +41,7 @@ export default function CategoryDetail() {
   const [viewMode] = useViewMode();
   const [tableSort, setTableSort] = useState<{ key: TableSortKey; dir: SortDir }>({ key: "published_at", dir: "desc" });
   const [assignModal, setAssignModal] = useState<AssignModalState>(null);
+  const [showLow, setShowLow] = useState(false);  // 관련도 낮음(Arca 1~4점) 펼치기
 
   const refreshItems = () => {
     qc.invalidateQueries({ queryKey: ["items"] });
@@ -163,10 +171,16 @@ export default function CategoryDetail() {
         <FilterPanel filters={filters} onChange={setFilters} />
       </div>
 
+      {(() => {
+        const lowCount = items.filter(isLowRelevance).length;
+        const cardItems = showLow ? items : items.filter((i) => !isLowRelevance(i));
+        const tableItems = showLow ? sortedItems : sortedItems.filter((i) => !isLowRelevance(i));
+        const shownCount = showLow ? items.length : items.length - lowCount;
+        return (
       <div style={{ ...cardStyle, overflow: "hidden" }}>
         <div style={{ ...sectionHeaderStyle, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div style={sectionTitleStyle}>
-            발견 이력 <span style={{ color: "var(--color-text-muted)", fontWeight: 400 }}>({items.length})</span>
+            발견 이력 <span style={{ color: "var(--color-text-muted)", fontWeight: 400 }}>({shownCount})</span>
           </div>
           <ViewToggle />
         </div>
@@ -181,7 +195,7 @@ export default function CategoryDetail() {
             </div>
           ) : viewMode === "table" ? (
             <ItemTable
-              items={sortedItems}
+              items={tableItems}
               sortKey={tableSort.key}
               sortDir={tableSort.dir}
               onSort={handleTableSort}
@@ -191,7 +205,7 @@ export default function CategoryDetail() {
             />
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
-              {items.map((item) => (
+              {cardItems.map((item) => (
                 <ItemCard
                   key={item.id}
                   item={item}
@@ -200,8 +214,24 @@ export default function CategoryDetail() {
               ))}
             </div>
           )}
+
+          {/* 관련도 낮음(Arca 1~4점) — 기본 숨김, 눌러서 펼치기 */}
+          {lowCount > 0 && (
+            <button
+              onClick={() => setShowLow((v) => !v)}
+              style={{
+                marginTop: 14, width: "100%", padding: "10px 14px", borderRadius: 10,
+                border: "1px dashed var(--color-border)", background: "transparent",
+                color: "var(--color-text-muted)", fontSize: 13, fontWeight: 500, cursor: "pointer",
+              }}
+            >
+              {showLow ? `관련도 낮음 ${lowCount}개 숨기기 ▲` : `관련도 낮음 ${lowCount}개 보기 ▼ (Arca 4점 이하 — 엉뚱하게 수집된 것)`}
+            </button>
+          )}
         </div>
       </div>
+        );
+      })()}
 
       <AssignModal
         state={assignModal}
