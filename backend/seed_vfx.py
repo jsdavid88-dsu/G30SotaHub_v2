@@ -208,11 +208,15 @@ CATEGORIES = [
             "video lora", "video model", "video synthesis",
             "long video generation", "controllable video generation",
             "video foundation model", "open video model",
+            # 최신 모델/툴 명시 (#7 — 이름 기반으로도 회수되게)
+            "LTX", "LTX-Video", "LTX-2", "LTX trainer", "Lightricks",
+            "Wan", "Wan2.2", "HunyuanVideo", "Mochi", "CogVideoX",
+            "Veo", "Sora", "Kling", "Hailuo", "Seedance", "Runway Gen",
             "cs.CV",  # arxiv prefix — _collect_arxiv_categories 가 활용
         ],
         "github_topics": [
             "text-to-video", "video-generation", "video-diffusion",
-            "video-synthesis", "video-lora",
+            "video-synthesis", "video-lora", "ltx-video",
         ],
         "hf_tags": ["text-to-video", "video-generation", "diffusion"],
         "subreddits": ["StableDiffusion", "MachineLearning", "AnimateDiff", "comfyui"],
@@ -232,11 +236,15 @@ CATEGORIES = [
             "image generation", "image diffusion", "image synthesis",
             "controlnet", "ip-adapter", "image lora", "stable diffusion lora",
             "image foundation model", "open image model",
+            # 최신 모델 명시 (#7)
+            "FLUX", "FLUX.1", "Ideogram", "Ideogram 3", "Ideogram 4",
+            "Qwen-Image", "Seedream", "Imagen", "Recraft", "HiDream",
+            "SD3", "SDXL", "Nano Banana", "Bernini",
             "cs.CV",
         ],
         "github_topics": [
             "text-to-image", "stable-diffusion", "diffusion-models",
-            "controlnet", "lora", "comfyui",
+            "controlnet", "lora", "comfyui", "flux",
         ],
         "hf_tags": ["text-to-image", "diffusion", "stable-diffusion-xl", "lora"],
         "subreddits": ["StableDiffusion", "MachineLearning", "comfyui"],
@@ -263,6 +271,48 @@ CATEGORIES = [
         "x_accounts": ["_akhaliq", "multimodalart"],
         "current_sota": [],
         "display_order": 13,
+    },
+
+    {
+        "slug": "image_edit",
+        "name_ko": "이미지 편집",
+        "name_en": "Image Editing",
+        "description": "지시 기반 이미지 편집 / 인페인팅 / 합성·리믹스. Nano Banana / FLUX Kontext / Qwen-Image-Edit 등 신모델 자동 추적.",
+        "icon": "✏️",
+        "keywords": [
+            "image editing", "instruction image editing", "instruction-based editing",
+            "image inpainting", "image manipulation", "prompt-based image editing",
+            "FLUX Kontext", "Qwen-Image-Edit", "Nano Banana", "SeedEdit",
+            "Ideogram", "OmniGen", "Bernini", "drag editing", "image-to-image edit",
+            "cs.CV",
+        ],
+        "github_topics": ["image-editing", "inpainting", "image-manipulation", "image-to-image"],
+        "hf_tags": ["image-to-image", "inpainting"],
+        "subreddits": ["StableDiffusion", "comfyui", "MachineLearning"],
+        "x_accounts": ["_akhaliq", "multimodalart"],
+        "current_sota": [],
+        "display_order": 20,
+    },
+
+    {
+        "slug": "video_edit",
+        "name_ko": "영상 편집",
+        "name_en": "Video Editing",
+        "description": "영상→영상 편집 / 리스타일 / 객체 제거·교체 / 부분 편집. V2V, Runway Aleph, LTX 편집 등.",
+        "icon": "🎞️",
+        "keywords": [
+            "video editing", "video-to-video", "v2v", "video restyle",
+            "video style transfer", "video inpainting", "video object replacement",
+            "instruction video editing", "Runway Aleph", "LTX video edit",
+            "rerender", "first-frame edit", "controllable video editing",
+            "cs.CV",
+        ],
+        "github_topics": ["video-editing", "video-to-video", "video-inpainting"],
+        "hf_tags": ["video-to-video"],
+        "subreddits": ["StableDiffusion", "comfyui", "MachineLearning", "AnimateDiff"],
+        "x_accounts": ["_akhaliq", "multimodalart"],
+        "current_sota": [],
+        "display_order": 21,
     },
 
     {

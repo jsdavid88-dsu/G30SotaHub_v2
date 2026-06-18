@@ -319,7 +319,15 @@ export default function Dashboard() {
     queryFn: () => fetchItems({ workflow: "new", limit: 500 }),
   });
 
+  // 핵심 카테고리(이미지/영상 생성·편집) 는 신규 연구가 제일 먼저 보이도록 항상 상단 고정.
+  const PRIORITY_SLUGS = ["image_generation", "image_edit", "video_generation", "video_edit"];
+  const prio = (slug: string) => {
+    const i = PRIORITY_SLUGS.indexOf(slug);
+    return i === -1 ? 99 : i;
+  };
   const sortedCategories = [...categories].sort((a, b) => {
+    const pa = prio(a.slug), pb = prio(b.slug);
+    if (pa !== pb) return pa - pb;            // 핵심 4개 먼저 (지정 순서대로)
     if (a.item_count === 0 && b.item_count > 0) return 1;
     if (a.item_count > 0 && b.item_count === 0) return -1;
     return b.item_count - a.item_count;
