@@ -11,12 +11,10 @@ import ViewToggle from "../components/ViewToggle";
 import AssignModal, { type AssignModalState } from "../components/AssignModal";
 import CategoryKeywordsEditor from "../components/CategoryKeywordsEditor";
 
-// 관련도 낮음 — Arca 가 1~4점으로 매긴 항목(엉뚱하게 긁힌 것). 0=미분류는 펜딩이라 제외(보임).
-const LOW_SCORE_MAX = 4;
-const isLowRelevance = (it: { llm_score?: number }) => {
-  const s = it.llm_score ?? 0;
-  return s >= 1 && s <= LOW_SCORE_MAX;
-};
+// 기본 노출 기준 — Arca llm_score 7점 이상(관련도 높음)만 기본으로 보인다.
+// 7점 미만(0=미분류·펜딩 + 1~6=관련도 보통/낮음)은 기본 숨김 → 토글로 펼치기.
+const MIN_VISIBLE_SCORE = 7;
+const isBelowBar = (it: { llm_score?: number }) => (it.llm_score ?? 0) < MIN_VISIBLE_SCORE;
 import { useViewMode } from "../utils/viewMode";
 import { dedup } from "../utils/dedup";
 import { cardStyle, sectionHeaderStyle, sectionTitleStyle, badgeStyle, btnGhost } from "../design";
@@ -41,7 +39,7 @@ export default function CategoryDetail() {
   const [viewMode] = useViewMode();
   const [tableSort, setTableSort] = useState<{ key: TableSortKey; dir: SortDir }>({ key: "published_at", dir: "desc" });
   const [assignModal, setAssignModal] = useState<AssignModalState>(null);
-  const [showLow, setShowLow] = useState(false);  // 관련도 낮음(Arca 1~4점) 펼치기
+  const [showBelow, setShowBelow] = useState(false);  // 7점 미만(미분류·보통·낮음) 펼치기
 
   const refreshItems = () => {
     qc.invalidateQueries({ queryKey: ["items"] });
@@ -172,10 +170,10 @@ export default function CategoryDetail() {
       </div>
 
       {(() => {
-        const lowCount = items.filter(isLowRelevance).length;
-        const cardItems = showLow ? items : items.filter((i) => !isLowRelevance(i));
-        const tableItems = showLow ? sortedItems : sortedItems.filter((i) => !isLowRelevance(i));
-        const shownCount = showLow ? items.length : items.length - lowCount;
+        const belowCount = items.filter(isBelowBar).length;
+        const cardItems = showBelow ? items : items.filter((i) => !isBelowBar(i));
+        const tableItems = showBelow ? sortedItems : sortedItems.filter((i) => !isBelowBar(i));
+        const shownCount = showBelow ? items.length : items.length - belowCount;
         return (
       <div style={{ ...cardStyle, overflow: "hidden" }}>
         <div style={{ ...sectionHeaderStyle, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
@@ -215,17 +213,17 @@ export default function CategoryDetail() {
             </div>
           )}
 
-          {/* 관련도 낮음(Arca 1~4점) — 기본 숨김, 눌러서 펼치기 */}
-          {lowCount > 0 && (
+          {/* 7점 미만(미분류·관련도 보통/낮음) — 기본 숨김, 눌러서 펼치기 */}
+          {belowCount > 0 && (
             <button
-              onClick={() => setShowLow((v) => !v)}
+              onClick={() => setShowBelow((v) => !v)}
               style={{
                 marginTop: 14, width: "100%", padding: "10px 14px", borderRadius: 10,
                 border: "1px dashed var(--color-border)", background: "transparent",
                 color: "var(--color-text-muted)", fontSize: 13, fontWeight: 500, cursor: "pointer",
               }}
             >
-              {showLow ? `관련도 낮음 ${lowCount}개 숨기기 ▲` : `관련도 낮음 ${lowCount}개 보기 ▼ (Arca 4점 이하 — 엉뚱하게 수집된 것)`}
+              {showBelow ? `7점 미만 ${belowCount}개 숨기기 ▲` : `7점 미만 ${belowCount}개 보기 ▼ (관련도 보통·낮음 + 미분류)`}
             </button>
           )}
         </div>
