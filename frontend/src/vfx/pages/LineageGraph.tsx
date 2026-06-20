@@ -1,18 +1,43 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchCategories } from "../api/categories";
-import { fetchCategoryLineage } from "../api/lineage";
+import {
+  fetchCategoryLineage,
+  createLineageEdge,
+  confirmLineageEdge,
+  deleteLineageEdge,
+} from "../api/lineage";
 import LineageFlow from "../components/LineageFlow";
 import { pageHeadingStyle, pageSubtitleStyle, cardStyle, inputStyle } from "../design";
 import VfxSubNav from "../components/VfxSubNav";
+import { useAuth } from "../../contexts/AuthContext";
 
 export default function LineageGraph() {
   const [selectedSlug, setSelectedSlug] = useState<string>("");
+  const { user } = useAuth();
+  const canEdit = user?.role === "admin" || user?.role === "professor";
+  const qc = useQueryClient();
+
   const { data: categories = [] } = useQuery({ queryKey: ["categories"], queryFn: fetchCategories });
   const { data: graph } = useQuery({
     queryKey: ["lineage", "category", selectedSlug],
     queryFn: () => fetchCategoryLineage(selectedSlug),
     enabled: !!selectedSlug,
+  });
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["lineage", "category", selectedSlug] });
+  const createMut = useMutation({
+    mutationFn: (v: { parent_id: number; child_id: number }) => createLineageEdge(v),
+    onSuccess: invalidate,
+    onError: (e: unknown) => alert(`엣지 추가 실패: ${e instanceof Error ? e.message : e}`),
+  });
+  const confirmMut = useMutation({
+    mutationFn: (id: number) => confirmLineageEdge(id),
+    onSuccess: invalidate,
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => deleteLineageEdge(id),
+    onSuccess: invalidate,
   });
 
   return (
@@ -21,7 +46,10 @@ export default function LineageGraph() {
       <div style={{ marginBottom: 24 }}>
         <h1 style={pageHeadingStyle}>기술 계보</h1>
         <p style={pageSubtitleStyle}>
-          Semantic Scholar 인용 관계 기반. 논문 노드를 클릭해 상세로 이동.
+          Semantic Scholar 인용 + Arca 계열/wiki 자동 연결.
+          {canEdit
+            ? " 노드를 드래그해 직접 연결하거나, AI 추정 엣지를 확정/삭제할 수 있습니다."
+            : " 논문 노드를 클릭해 상세로 이동."}
         </p>
       </div>
 
@@ -41,7 +69,14 @@ export default function LineageGraph() {
 
       {selectedSlug ? (
         <div style={{ ...cardStyle, padding: 16 }}>
-          <LineageFlow graph={graph} height={700} />
+          <LineageFlow
+            graph={graph}
+            height={700}
+            editable={canEdit}
+            onCreateEdge={(parentId, childId) => createMut.mutate({ parent_id: parentId, child_id: childId })}
+            onConfirmEdge={(id) => confirmMut.mutate(id)}
+            onDeleteEdge={(id) => deleteMut.mutate(id)}
+          />
         </div>
       ) : (
         <div style={{ ...cardStyle, padding: 48, textAlign: "center" }}>

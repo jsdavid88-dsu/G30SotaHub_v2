@@ -15,9 +15,20 @@ class LineageNode(BaseModel):
 class LineageEdgeRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    id: int | None = None
     parent_id: int
     child_id: int
     relationship_type: str
+    origin: str = "auto"       # auto | manual | arca
+    status: str = "confirmed"  # confirmed | suggested
+    note: str | None = None
+
+
+class LineageEdgeCreate(BaseModel):
+    parent_id: int
+    child_id: int
+    relationship_type: str = "related"
+    note: str | None = None
 
 
 class LineageGraph(BaseModel):

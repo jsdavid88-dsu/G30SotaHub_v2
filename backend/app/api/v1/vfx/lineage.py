@@ -1,16 +1,24 @@
 """Lineage endpoints — technology genealogy graph."""
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_role
 from app.models import Category, Item, ItemCategory, LineageEdge
-from app.models.user import User
-from app.schemas.vfx.lineage import LineageEdgeRead, LineageGraph, LineageNode
+from app.models.user import User, UserRole
+from app.schemas.vfx.lineage import (
+    LineageEdgeCreate,
+    LineageEdgeRead,
+    LineageGraph,
+    LineageNode,
+)
 
 router = APIRouter(prefix="/lineage", tags=["lineage"])
+
+# 사람이 직접 그릴 수 있는 관계 타입 (auto 전용 cites/same_family/wiki_ref 는 제외)
+MANUAL_RELATION_TYPES = {"related", "extends", "replaces", "competes", "baseline", "derived_from"}
 
 
 def _node_from_item(item: Item) -> LineageNode:
@@ -128,3 +136,83 @@ async def get_category_lineage(
         nodes=[_node_from_item(i) for i in items],
         edges=[LineageEdgeRead.model_validate(e) for e in edges],
     )
+
+
+# ── 편집 (Phase 3 지식 그래프) — 자유 엣지 + AI 추정 confirm ──────────────────
+
+
+@router.post("/edges", response_model=LineageEdgeRead, status_code=status.HTTP_201_CREATED)
+async def create_lineage_edge(
+    payload: LineageEdgeCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    _role: User = Depends(require_role(UserRole.professor, UserRole.admin)),
+):
+    """사람이 직접 그린 계보 엣지(자유 엣지) 추가. professor/admin 만."""
+    if payload.parent_id == payload.child_id:
+        raise HTTPException(status_code=400, detail="자기 자신과는 연결할 수 없습니다")
+    rel = (payload.relationship_type or "related").strip()
+    if rel not in MANUAL_RELATION_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"relationship_type 는 {sorted(MANUAL_RELATION_TYPES)} 중 하나여야 합니다",
+        )
+    ids = {payload.parent_id, payload.child_id}
+    found = set((await db.execute(select(Item.id).where(Item.id.in_(ids)))).scalars().all())
+    if found != ids:
+        raise HTTPException(status_code=404, detail="존재하지 않는 항목입니다")
+    edge = LineageEdge(
+        parent_id=payload.parent_id,
+        child_id=payload.child_id,
+        relationship_type=rel,
+        origin="manual",
+        status="confirmed",
+        created_by=user.id,
+        note=(payload.note or None),
+    )
+    db.add(edge)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="이미 연결된 쌍입니다")
+    await db.refresh(edge)
+    return LineageEdgeRead.model_validate(edge)
+
+
+@router.post("/edges/{edge_id}/confirm", response_model=LineageEdgeRead)
+async def confirm_lineage_edge(
+    edge_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    _role: User = Depends(require_role(UserRole.professor, UserRole.admin)),
+):
+    """AI 추정(suggested) 엣지를 확정(confirmed). professor/admin 만."""
+    edge = await db.get(LineageEdge, edge_id)
+    if not edge:
+        raise HTTPException(status_code=404, detail="엣지를 찾을 수 없습니다")
+    edge.status = "confirmed"
+    if edge.created_by is None:
+        edge.created_by = user.id
+    await db.commit()
+    await db.refresh(edge)
+    return LineageEdgeRead.model_validate(edge)
+
+
+@router.delete("/edges/{edge_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_lineage_edge(
+    edge_id: int,
+    db: AsyncSession = Depends(get_db),
+    _role: User = Depends(require_role(UserRole.professor, UserRole.admin)),
+):
+    """엣지 삭제 — 자유 엣지 제거 또는 AI 추정 reject. professor/admin 만.
+
+    주의: origin='auto' 엣지(인용/계열/wiki 자동계산)는 삭제해도 다음 크롤/그룹핑에서
+    재생성될 수 있음. 영구 제거가 목적이면 수동 엣지(manual)/추정(arca)만 대상으로 쓸 것.
+    """
+    edge = await db.get(LineageEdge, edge_id)
+    if not edge:
+        raise HTTPException(status_code=404, detail="엣지를 찾을 수 없습니다")
+    await db.delete(edge)
+    await db.commit()
+    return None
