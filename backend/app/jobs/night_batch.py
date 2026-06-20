@@ -383,6 +383,94 @@ async def step_run_grouper() -> dict:
     return {"step": "grouper", **result}
 
 
+# ── Step 4.5: 계보 자동 추론 (Gemma — Phase 3 지식 그래프, 사람이 안 긋고 자동) ──
+
+ALLOWED_LINEAGE_RELS = {"extends", "replaces", "competes", "derived_from"}
+
+
+async def step_infer_lineage() -> dict:
+    """Gemma 가 분야별 계보(발전형/대체/경쟁/파생)를 자동 추론 → LineageEdge(origin=arca, status=suggested).
+
+    사람이 직접 안 그어도 그래프가 채워진다. 이미 있는 (parent,child) 쌍(양방향)은 건너뜀.
+    우선 분야(생성/편집) 먼저, GPU 보호(#21) 위해 분야/항목 수 캡. 토글 off 면 skip.
+    """
+    from app.config import settings
+    if not settings.lineage_infer_enabled:
+        return {"step": "lineage_infer", "skipped": True}
+
+    from app.constants_vfx import PRIORITY_CATEGORY_SLUGS
+    from app.jobs.arca_brain import infer_lineage
+    from app.models import LineageEdge
+
+    max_cats = max(1, settings.lineage_infer_max_categories)
+    per_cat = max(2, settings.lineage_infer_items_per_category)
+    created = 0
+    proposed = 0
+    existing: set[tuple[int, int]] = set()  # 양방향 쌍 — 전 분야 누적(커밋 전 추가분 포함)
+
+    async with SessionLocal() as db:
+        cats = list((await db.execute(select(Category))).scalars().all())
+        rank = {s: i for i, s in enumerate(PRIORITY_CATEGORY_SLUGS)}
+        cats_sorted = sorted(cats, key=lambda c: (rank.get(c.slug, 99), c.display_order or 0))
+        loop = asyncio.get_running_loop()
+
+        for cat in cats_sorted[:max_cats]:
+            rows = (await db.execute(
+                select(Item.id, Item.title, Item.published_at, Item.item_metadata)
+                .join(ItemCategory, ItemCategory.item_id == Item.id)
+                .where(ItemCategory.category_id == cat.id, Item.llm_score > 0)
+                .order_by(Item.discovered_at.desc())
+                .limit(per_cat)
+            )).all()
+            if len(rows) < 2:
+                continue
+            id_set = {r[0] for r in rows}
+            for (p, c) in (await db.execute(
+                select(LineageEdge.parent_id, LineageEdge.child_id).where(
+                    or_(LineageEdge.parent_id.in_(id_set), LineageEdge.child_id.in_(id_set))
+                )
+            )).all():
+                existing.add((p, c))
+                existing.add((c, p))
+
+            items = []
+            for (iid, title, pub, md) in rows:
+                fam = ""
+                if isinstance(md, dict):
+                    arca = md.get("arca") or {}
+                    fam = arca.get("family") or arca.get("brand") or ""
+                items.append({"id": iid, "title": title, "year": pub.year if pub else None, "family": fam})
+
+            edges = await loop.run_in_executor(None, lambda it=items: infer_lineage(it))
+            proposed += len(edges)
+            for e in edges:
+                if not isinstance(e, dict):
+                    continue
+                try:
+                    fid = int(e.get("from_id"))
+                    tid = int(e.get("to_id"))
+                except (TypeError, ValueError):
+                    continue
+                rel = str(e.get("relationship", "")).strip()
+                if fid == tid or fid not in id_set or tid not in id_set or rel not in ALLOWED_LINEAGE_RELS:
+                    continue
+                if (fid, tid) in existing:
+                    continue
+                db.add(LineageEdge(
+                    parent_id=fid, child_id=tid, relationship_type=rel,
+                    origin="arca", status="suggested",
+                    note=(str(e.get("reason", ""))[:500] or None),
+                ))
+                existing.add((fid, tid))
+                existing.add((tid, fid))
+                created += 1
+
+        await db.commit()
+
+    logger.info(f"[night] lineage infer: {created} suggested edges ({proposed} proposed)")
+    return {"step": "lineage_infer", "created": created, "proposed": proposed}
+
+
 # ── Step 5: Category Promotion (Gemma4) ─────────────────────
 
 async def step_detect_promotions() -> dict:
@@ -578,7 +666,14 @@ async def run_night_batch() -> list[dict]:
     run_state.update(stage="5/7 아이템 그룹핑", progress=0.76)
     r = await step_run_grouper()
     results.append(r)
-    run_state.update(progress=0.85)
+    run_state.update(progress=0.84)
+
+    # Step 4.5: 계보 자동 추론 (Gemma — 발전형/대체/경쟁). 사람이 안 긋고 자동.
+    run_state.update(stage="계보 자동 추론 (Gemma)", progress=0.85)
+    r = await step_infer_lineage()
+    results.append(r)
+    if not r.get("skipped"):
+        run_state.update(detail=f"계보 추정: {r.get('created', 0)}개 자동 연결", progress=0.87)
 
     # Step 5: Promotion
     run_state.update(stage="6/7 카테고리 승격 검토 (Gemma4)", progress=0.88)

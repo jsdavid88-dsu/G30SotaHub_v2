@@ -90,6 +90,13 @@ class Settings(BaseSettings):
     # 한 야간 LDR 질의 상한 (GPU 보호 — 분야 19개+dangling+수동 다 돌면 과부하).
     ldr_nightbatch_max_queries: int = 6
 
+    # 야간배치: Gemma 가 분야별 계보(발전형/대체/경쟁)를 자동 추론 → LineageEdge(origin=arca,
+    # status=suggested). 사람이 직접 안 그어도 그래프가 채워짐. GPU 보호 위해 분야/항목 수 캡.
+    # off 면 step 건너뜀(5090 GPU 부하 조절용).
+    lineage_infer_enabled: bool = True
+    lineage_infer_max_categories: int = 8
+    lineage_infer_items_per_category: int = 25
+
     model_config = {"env_file": _ENV_FILE, "extra": "ignore"}
 
 

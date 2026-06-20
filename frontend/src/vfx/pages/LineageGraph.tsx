@@ -46,10 +46,10 @@ export default function LineageGraph() {
       <div style={{ marginBottom: 24 }}>
         <h1 style={pageHeadingStyle}>기술 계보</h1>
         <p style={pageSubtitleStyle}>
-          Semantic Scholar 인용 + Arca 계열/wiki 자동 연결.
+          인용·계열·wiki + 밤마다 Gemma(Arca)가 발전형/대체/경쟁을 <b>자동</b>으로 연결합니다 (주황 점선 = AI 추정).
           {canEdit
-            ? " 노드를 드래그해 직접 연결하거나, AI 추정 엣지를 확정/삭제할 수 있습니다."
-            : " 논문 노드를 클릭해 상세로 이동."}
+            ? " 교수·관리자는 틀린 추정을 고치거나(클릭→삭제) 빠진 연결만 보완하면 됩니다."
+            : " 노드를 클릭해 상세로 이동."}
         </p>
       </div>
 

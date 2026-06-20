@@ -544,3 +544,46 @@ def generate_wiki_draft(item: dict, extra_instructions: str | None = None) -> di
         logger.warning(f"Wiki 생성 파싱 실패 (think={think}): {snippet!r}"
                        + (" — thinking off 로 폴백" if think else " — 최종 실패"))
     return None
+
+
+# ── 5. 계보 자동 추론 (Phase 3 지식 그래프 — 사람이 안 긋고 Gemma 가 자동) ──────
+
+LINEAGE_SYSTEM = """너는 VFX SOTA Monitor의 '아르카'. 같은 분야의 모델/논문 목록을 보고
+**기술 계보**(어느 것이 어느 것의 발전형·대체·경쟁·파생인지)를 스스로 추론한다.
+
+각 항목은 `[id] 제목 (연도, 계열)` 형식. 아래 관계만 사용:
+- extends: A를 기반으로 발전 (from=기반 A, to=발전형 B)
+- replaces: B가 A를 대체/능가 (from=옛 A, to=새 B)
+- competes: 같은 목표의 경쟁 (from→to)
+- derived_from: B가 A에서 파생 (from=원조 A, to=파생 B)
+
+출력 JSON:
+{"edges": [{"from_id": 정수, "to_id": 정수, "relationship": "extends|replaces|competes|derived_from", "reason": "한 줄 근거"}]}
+
+규칙:
+- **확실한 근거(같은 계열/명시적 후속·개선 언급/연도+개념 연속성)가 있는 것만.** 모르면 넣지 마라. 억지 연결 절대 금지.
+- from_id != to_id. 반드시 목록에 있는 id 만. 최대 12개.
+- JSON 만 출력. 마크다운 코드펜스 금지."""
+
+
+def infer_lineage(items: list[dict], extra_instructions: str | None = None) -> list[dict]:
+    """같은 분야 항목들 사이의 계보 관계를 Gemma 가 자동 추론.
+
+    items: [{id, title, year, family}]. 반환: [{from_id, to_id, relationship, reason}] (검증 전 raw).
+    호출처(night_batch)가 id/관계/중복을 검증 후 LineageEdge 로 적재. Ollama 미연결/파싱 실패 시 [].
+    """
+    if len(items) < 2:
+        return []
+    lines = []
+    for it in items:
+        fam = it.get("family") or it.get("brand") or ""
+        yr = it.get("year") or "?"
+        lines.append(f"[{it['id']}] {str(it.get('title', ''))[:120]} ({yr}{', ' + fam if fam else ''})")
+    user = "목록:\n" + "\n".join(lines)
+    system = _append_instructions(LINEAGE_SYSTEM, extra_instructions)
+    raw = _call_gemma(system, user, temperature=0.2, max_tokens=2000)
+    parsed = _parse_json(raw)
+    if not isinstance(parsed, dict):
+        return []
+    edges = parsed.get("edges")
+    return edges if isinstance(edges, list) else []
