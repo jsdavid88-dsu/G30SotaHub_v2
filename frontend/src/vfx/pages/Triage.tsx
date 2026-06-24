@@ -1,11 +1,11 @@
-// Triage 페이지 — 새로 발견된 모델을 빠르게 한 줄씩 분류.
-// 액션: 배정 / 모터헤드 / 보류 / 스킵 / 완료 / 후속개발 / 아카이빙 / 복귀
-// (메인 대시보드 / 카테고리 페이지의 표 모드에서도 동일 기능 제공 — 이 페이지는 status='new' 필터 진입점)
+// Triage 페이지 — 새로 발견된 모델을 한 줄씩 분류.
+// 1트랙: 새로 발견 → (배정) 연구중 → 완료   · 옆길: 보류 / 제외
+// 관련도 낮음(Arca 1~6점)은 기본 숨김(7점 필터). 토글로 포함 가능.
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Inbox, PauseCircle, Loader2, Archive, ChevronLeft, ExternalLink, Star, X } from "lucide-react";
-import { fetchItems, type WorkflowStatus, type LifecycleStatus } from "../api/items";
+import { Inbox, PauseCircle, Loader2, CheckCircle2, ChevronLeft, ExternalLink, Star, X } from "lucide-react";
+import { fetchItems, type WorkflowStatus } from "../api/items";
 import type { Item } from "../types";
 import {
   cardStyle, sectionHeaderStyle, sectionTitleStyle, btnGhost,
@@ -17,20 +17,12 @@ import TriageActions from "../components/TriageActions";
 import AssignModal, { type AssignModalState } from "../components/AssignModal";
 
 const TABS: { value: WorkflowStatus; label: string; icon: typeof Inbox; color: string }[] = [
-  { value: "new",      label: "새로 발견",  icon: Inbox,           color: "var(--color-accent)" },
-  { value: "holding",  label: "보류",       icon: PauseCircle,     color: "var(--color-warning)" },
-  { value: "triaged",  label: "진행 중",    icon: Loader2,         color: "var(--color-accent)" },
-  { value: "skipped",  label: "스킵",       icon: X,               color: "#64748b" },
-  { value: "archived", label: "아카이브",   icon: Archive,         color: "#6b7280" },
+  { value: "new",      label: "새로 발견", icon: Inbox,        color: "var(--color-accent)" },
+  { value: "triaged",  label: "연구중",    icon: Loader2,      color: "var(--color-accent)" },
+  { value: "done",     label: "완료",      icon: CheckCircle2, color: "#059669" },
+  { value: "holding",  label: "보류",      icon: PauseCircle,  color: "var(--color-warning)" },
+  { value: "skipped",  label: "제외",      icon: X,            color: "#64748b" },
 ];
-
-const LIFECYCLE_LABEL: Record<string, { label: string; bg: string; color: string }> = {
-  research:   { label: "연구",   bg: "#f1f5f9", color: "#475569" },
-  dev:        { label: "개발",   bg: "#dbeafe", color: "#1d4ed8" },
-  testing:    { label: "테스트", bg: "#fef3c7", color: "#b45309" },
-  production: { label: "운영",   bg: "#d1fae5", color: "#047857" },
-  deprecated: { label: "폐기",   bg: "#fee2e2", color: "#dc2626" },
-};
 
 function formatDate(d: string | null | undefined): string {
   if (!d) return "—";
@@ -49,8 +41,6 @@ function TriageRow({ item, onDone, onAssign }: {
   onAssign: (itemId: number, mode: "assign" | "motorhead") => void;
 }) {
   const score = item.llm_score || item.keyword_score;
-  const ls = item.lifecycle_status;
-  const lsInfo = ls ? LIFECYCLE_LABEL[ls] : null;
   const activeAssignment = (item.assignments ?? []).find((a) => a.status !== "approved" && a.status !== "rejected");
 
   return (
@@ -74,14 +64,6 @@ function TriageRow({ item, onDone, onAssign }: {
             <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11, color: "var(--color-warning)", fontWeight: 600 }}>
               <Star style={{ width: 11, height: 11, fill: "currentColor" }} />
               {score}
-            </span>
-          )}
-          {lsInfo && (
-            <span style={{
-              padding: "2px 8px", borderRadius: 6, fontSize: 11, fontWeight: 600,
-              background: lsInfo.bg, color: lsInfo.color,
-            }}>
-              {lsInfo.label}
             </span>
           )}
           {activeAssignment && (
@@ -146,27 +128,28 @@ export default function Triage() {
   const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState<WorkflowStatus>("new");
   const [assignModal, setAssignModal] = useState<AssignModalState>(null);
-  const [lifecycleFilter, setLifecycleFilter] = useState<LifecycleStatus | "">("");
+  const [hideLow, setHideLow] = useState(true);  // 관련도 낮음(1~6점) 기본 숨김
 
   // 각 탭의 카운트 — hooks 규칙 준수 위해 명시적으로 5개
-  const newQ      = useQuery({ queryKey: ["items", "triage-count", "new"],      queryFn: () => fetchItems({ workflow: "new",      limit: 500 }) });
-  const holdingQ  = useQuery({ queryKey: ["items", "triage-count", "holding"],  queryFn: () => fetchItems({ workflow: "holding",  limit: 500 }) });
-  const triagedQ  = useQuery({ queryKey: ["items", "triage-count", "triaged"],  queryFn: () => fetchItems({ workflow: "triaged",  limit: 500 }) });
-  const skippedQ  = useQuery({ queryKey: ["items", "triage-count", "skipped"],  queryFn: () => fetchItems({ workflow: "skipped",  limit: 500 }) });
-  const archivedQ = useQuery({ queryKey: ["items", "triage-count", "archived"], queryFn: () => fetchItems({ workflow: "archived", limit: 500 }) });
+  const newQ      = useQuery({ queryKey: ["items", "triage-count", "new", hideLow],      queryFn: () => fetchItems({ workflow: "new",      hide_low: hideLow, limit: 500 }) });
+  const triagedQ  = useQuery({ queryKey: ["items", "triage-count", "triaged", hideLow],  queryFn: () => fetchItems({ workflow: "triaged",  hide_low: hideLow, limit: 500 }) });
+  const doneQ     = useQuery({ queryKey: ["items", "triage-count", "done", hideLow],     queryFn: () => fetchItems({ workflow: "done",     hide_low: hideLow, limit: 500 }) });
+  const holdingQ  = useQuery({ queryKey: ["items", "triage-count", "holding", hideLow],  queryFn: () => fetchItems({ workflow: "holding",  hide_low: hideLow, limit: 500 }) });
+  const skippedQ  = useQuery({ queryKey: ["items", "triage-count", "skipped", hideLow],  queryFn: () => fetchItems({ workflow: "skipped",  hide_low: hideLow, limit: 500 }) });
   const counts: Record<WorkflowStatus, number> = {
     new:      newQ.data?.length      ?? 0,
-    holding:  holdingQ.data?.length  ?? 0,
     triaged:  triagedQ.data?.length  ?? 0,
+    done:     doneQ.data?.length     ?? 0,
+    holding:  holdingQ.data?.length  ?? 0,
     skipped:  skippedQ.data?.length  ?? 0,
-    archived: archivedQ.data?.length ?? 0,
+    archived: 0,
   };
 
   const { data: items = [], isLoading, refetch } = useQuery({
-    queryKey: ["items", "triage", activeTab, lifecycleFilter],
+    queryKey: ["items", "triage", activeTab, hideLow],
     queryFn: () => fetchItems({
       workflow: activeTab,
-      lifecycle: lifecycleFilter || undefined,
+      hide_low: hideLow,
       sort: "published",
       limit: 200,
     }),
@@ -176,9 +159,6 @@ export default function Triage() {
     qc.invalidateQueries({ queryKey: ["items"] });
     refetch();
   };
-
-  // lifecycle 필터는 'triaged' 탭에서만 의미 있음
-  const showLifecycleFilter = activeTab === "triaged";
 
   return (
     <div style={{ width: "100%" }}>
@@ -190,78 +170,68 @@ export default function Triage() {
         <div>
           <h1 style={pageHeadingStyle}>Triage</h1>
           <p style={pageSubtitleStyle}>
-            새로 발견된 모델을 한 줄씩 보면서 빠르게 분류 — 배정 / 보류 / 스킵 / 모터헤드 진행 / 완료 / 후속개발 / 아카이빙
+            새로 발견 → 배정하면 <b>연구중</b> → 더 안 해도 되면 <b>완료</b>. 관심 없으면 보류·제외.
           </p>
         </div>
       </div>
 
       {/* 탭 */}
-      <div style={{
-        display: "flex", gap: 4,
-        background: "var(--color-card)", border: "1px solid var(--color-border)",
-        borderRadius: 12, padding: 4, marginBottom: 20,
-        overflowX: "auto",
-      }}>
-        {TABS.map((t) => {
-          const Icon = t.icon;
-          const active = activeTab === t.value;
-          const cnt = counts[t.value];
-          return (
-            <button
-              key={t.value}
-              onClick={() => setActiveTab(t.value)}
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 6,
-                padding: "8px 14px", borderRadius: 8,
-                fontSize: 13, fontWeight: 600,
-                background: active ? t.color : "transparent",
-                color: active ? "#fff" : "var(--color-text-secondary)",
-                border: "none", cursor: "pointer",
-                transition: "all 0.12s",
-                whiteSpace: "nowrap",
-              }}
-            >
-              <Icon style={{ width: 14, height: 14 }} />
-              {t.label}
-              <span style={{
-                padding: "1px 8px", borderRadius: 99,
-                fontSize: 11, fontVariantNumeric: "tabular-nums",
-                background: active ? "rgba(255,255,255,0.25)" : "#f1f5f9",
-                color: active ? "#fff" : "var(--color-text-muted)",
-              }}>
-                {cnt}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* lifecycle 필터 (진행 중 탭에서만) */}
-      {showLifecycleFilter && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 12, color: "var(--color-text-muted)", fontWeight: 600 }}>라이프사이클:</span>
-          {(["", "research", "dev", "testing", "production", "deprecated"] as const).map((v) => {
-            const info = v ? LIFECYCLE_LABEL[v] : null;
-            const active = lifecycleFilter === v;
+      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 20, flexWrap: "wrap" }}>
+        <div style={{
+          display: "flex", gap: 4,
+          background: "var(--color-card)", border: "1px solid var(--color-border)",
+          borderRadius: 12, padding: 4,
+          overflowX: "auto",
+        }}>
+          {TABS.map((t) => {
+            const Icon = t.icon;
+            const active = activeTab === t.value;
+            const cnt = counts[t.value];
             return (
               <button
-                key={v}
-                onClick={() => setLifecycleFilter(v)}
+                key={t.value}
+                onClick={() => setActiveTab(t.value)}
                 style={{
-                  padding: "4px 10px", borderRadius: 6,
-                  fontSize: 11, fontWeight: 600,
-                  background: active ? (info?.bg ?? "var(--color-accent)") : "transparent",
-                  color: active ? (info?.color ?? "#fff") : "var(--color-text-muted)",
-                  border: `1px solid ${active ? "transparent" : "var(--color-border)"}`,
-                  cursor: "pointer",
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  padding: "8px 14px", borderRadius: 8,
+                  fontSize: 13, fontWeight: 600,
+                  background: active ? t.color : "transparent",
+                  color: active ? "#fff" : "var(--color-text-secondary)",
+                  border: "none", cursor: "pointer",
+                  transition: "all 0.12s",
+                  whiteSpace: "nowrap",
                 }}
               >
-                {v ? info?.label : "전체"}
+                <Icon style={{ width: 14, height: 14 }} />
+                {t.label}
+                <span style={{
+                  padding: "1px 8px", borderRadius: 99,
+                  fontSize: 11, fontVariantNumeric: "tabular-nums",
+                  background: active ? "rgba(255,255,255,0.25)" : "#f1f5f9",
+                  color: active ? "#fff" : "var(--color-text-muted)",
+                }}>
+                  {cnt}
+                </span>
               </button>
             );
           })}
         </div>
-      )}
+
+        {/* 관련도 낮음(1~6점) 포함/숨김 토글 */}
+        <button
+          onClick={() => setHideLow((v) => !v)}
+          title="Arca 가 1~6점으로 매긴 관련도 낮음 항목"
+          style={{
+            padding: "7px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+            border: "1px solid var(--color-border)", cursor: "pointer",
+            background: hideLow ? "transparent" : "#fef3c7",
+            color: hideLow ? "var(--color-text-muted)" : "#b45309",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {hideLow ? "관련도 낮음 숨김 ✓" : "관련도 낮음 표시 중"}
+        </button>
+      </div>
 
       {/* 본문 */}
       <div style={{ ...cardStyle, overflow: "hidden" }}>

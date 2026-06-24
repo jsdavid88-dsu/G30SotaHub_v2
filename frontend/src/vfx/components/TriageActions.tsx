@@ -1,9 +1,10 @@
 // Triage 액션 버튼 그룹 — 모델 한 행에 표시.
-// 컨텍스트(workflow status + lifecycle) 에 따라 다른 버튼 노출.
+// 1트랙 모델: 새로 발견 → (배정) 연구중 → 완료   · 옆길: 보류 / 제외
+// 헷갈리던 라이프사이클(연구/개발/테스트/운영/폐기)·후속개발·아카이브는 UI 에서 제거.
 import { useState } from "react";
 import {
   UserPlus, PauseCircle, SkipForward, CheckCircle2,
-  Wrench, Archive, RotateCcw, Briefcase, Loader2,
+  RotateCcw, Briefcase, Loader2,
 } from "lucide-react";
 import type { Item } from "../types";
 import { triageItem, patchItem, type TriagePayload } from "../api/items";
@@ -28,7 +29,6 @@ const btnBase = (color: string, bg: string): React.CSSProperties => ({
 export default function TriageActions({ item, onDone, size = "sm", onRequestAssign }: TriageActionsProps) {
   const [busy, setBusy] = useState<string | null>(null);
   const ws = item.status || "new";
-  const ls = item.lifecycle_status || "research";
 
   const fontSize = size === "sm" ? 11 : 12;
   const padding = size === "sm" ? "5px 10px" : "6px 12px";
@@ -38,6 +38,18 @@ export default function TriageActions({ item, onDone, size = "sm", onRequestAssi
     setBusy(label);
     try {
       await triageItem(item.id, payload);
+      onDone();
+    } catch (e) {
+      alert(`${label} 실패: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const setStatus = async (label: string, status: "new" | "triaged") => {
+    setBusy(label);
+    try {
+      await patchItem(item.id, { status });
       onDone();
     } catch (e) {
       alert(`${label} 실패: ${e instanceof Error ? e.message : String(e)}`);
@@ -77,10 +89,9 @@ export default function TriageActions({ item, onDone, size = "sm", onRequestAssi
     );
   };
 
-  // 컨텍스트별 버튼 셋
   const buttons: React.ReactNode[] = [];
 
-  // 배정 — new/holding 에서 노출
+  // 새로 발견 / 보류 → 배정(=연구중 시작) · 모터헤드(외부 배정)
   if (ws === "new" || ws === "holding") {
     buttons.push(
       <Btn key="assign" icon={UserPlus} label="배정" color="#fff" bg="#4f46e5" hoverBg="#3730a3"
@@ -92,7 +103,7 @@ export default function TriageActions({ item, onDone, size = "sm", onRequestAssi
     );
   }
 
-  // 보류 — new 에서만
+  // 보류 — 새로 발견에서만
   if (ws === "new") {
     buttons.push(
       <Btn key="hold" icon={PauseCircle} label="보류" color="#b45309" bg="#fef3c7" hoverBg="#fde68a"
@@ -100,57 +111,35 @@ export default function TriageActions({ item, onDone, size = "sm", onRequestAssi
     );
   }
 
-  // 스킵 — new/holding 에서
-  if (ws === "new" || ws === "holding") {
-    buttons.push(
-      <Btn key="skip" icon={SkipForward} label="스킵" color="#64748b" bg="#f1f5f9" hoverBg="#e2e8f0"
-        onClick={() => run("스킵", { action: "skip" })} />
-    );
-  }
-
-  // 완료 — triaged + (research|dev|testing) 에서. 또는 active assignment 가 있는 경우
-  const hasActiveAssignment = (item.assignments ?? []).some(
-    (a) => a.status !== "approved" && a.status !== "rejected"
-  );
-  if (ws === "triaged" && (ls === "research" || ls === "dev" || ls === "testing") && hasActiveAssignment) {
+  // 완료 — 연구중이면 항상 (조합 조건 제거 — 더 안 해도 되면 누른다)
+  if (ws === "triaged") {
     buttons.push(
       <Btn key="complete" icon={CheckCircle2} label="완료" color="#fff" bg="#059669" hoverBg="#047857"
         onClick={() => run("완료", { action: "complete" })} />
     );
   }
 
-  // 후속개발 — triaged 에서 lifecycle 이 dev 가 아니면 노출
-  if (ws === "triaged" && ls !== "dev" && ls !== "production" && ls !== "deprecated") {
+  // 완료 → 다시 연구중으로 (reopen)
+  if (ws === "done") {
     buttons.push(
-      <Btn key="follow" icon={Wrench} label="후속개발" color="#1d4ed8" bg="#dbeafe" hoverBg="#bfdbfe"
-        onClick={() => run("후속개발", { action: "follow_up" })} />
+      <Btn key="reopen" icon={RotateCcw} label="연구중으로" color="#4f46e5" bg="#e0e7ff" hoverBg="#c7d2fe"
+        onClick={() => setStatus("연구중으로", "triaged")} />
     );
   }
 
-  // 아카이빙 — archived/skipped 외에는 다 노출 (production 도 가능)
-  if (ws !== "archived" && ws !== "skipped") {
+  // 제외 — 새로발견/보류/연구중/완료 어디서든 (치우기)
+  if (ws === "new" || ws === "holding" || ws === "triaged" || ws === "done") {
     buttons.push(
-      <Btn key="archive" icon={Archive} label="아카이브" color="#6b7280" bg="#f9fafb" hoverBg="#f3f4f6"
-        onClick={() => run("아카이브", { action: "archive" })} />
+      <Btn key="skip" icon={SkipForward} label="제외" color="#64748b" bg="#f1f5f9" hoverBg="#e2e8f0"
+        onClick={() => run("제외", { action: "skip" })} />
     );
   }
 
-  // 복귀 — skipped/archived 인 경우 다시 new 로
+  // 복귀 — 제외/아카이브 → 새로 발견
   if (ws === "skipped" || ws === "archived") {
     buttons.push(
       <Btn key="restore" icon={RotateCcw} label="복귀" color="#4f46e5" bg="#e0e7ff" hoverBg="#c7d2fe"
-        onClick={async () => {
-          // 직접 PATCH 사용 (items.ts 는 이미 상단 static import — #17 dynamic 혼용 제거)
-          setBusy("복귀");
-          try {
-            await patchItem(item.id, { status: "new" });
-            onDone();
-          } catch (e) {
-            alert(`복귀 실패: ${e instanceof Error ? e.message : String(e)}`);
-          } finally {
-            setBusy(null);
-          }
-        }} />
+        onClick={() => setStatus("복귀", "new")} />
     );
   }
 

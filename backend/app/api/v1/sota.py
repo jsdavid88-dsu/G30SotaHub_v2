@@ -177,6 +177,14 @@ async def list_sota_items(
     """
     query = select(Item).options(*_load_item_with_assignments())
 
+    # 보류/제외/아카이브(triage 로 치운 것)는 SOTA 관리에서 제외 — 활성(new/triaged/done)만.
+    # status NULL(legacy)은 'new' 로 간주해 포함.
+    query = query.where(
+        func.coalesce(Item.status, "new").notin_(["holding", "skipped", "archived"])
+    )
+    # 관련도 낮음(Arca 1~6점) 제외 — 0(미분류)+7~10 만 (7점 필터 전역 적용).
+    query = query.where(~Item.llm_score.between(1, 6))
+
     if search:
         like = f"%{search}%"
         query = query.where(

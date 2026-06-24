@@ -26,11 +26,12 @@ const LIFECYCLE_INFO: Record<string, { bg: string; color: string; label: string;
 };
 
 const WORKFLOW_INFO: Record<string, { bg: string; color: string; label: string }> = {
-  new:      { bg: "#e0e7ff", color: "#4338ca", label: "새로 발견 (분류 대기)" },
-  triaged:  { bg: "#dbeafe", color: "#1d4ed8", label: "분류 완료 / 진행 중" },
+  new:      { bg: "#e0e7ff", color: "#4338ca", label: "새로 발견" },
+  triaged:  { bg: "#dbeafe", color: "#1d4ed8", label: "연구중" },
+  done:     { bg: "#d1fae5", color: "#047857", label: "완료" },
   holding:  { bg: "#fef3c7", color: "#b45309", label: "보류" },
-  skipped:  { bg: "#f1f5f9", color: "#64748b", label: "스킵" },
-  archived: { bg: "#f9fafb", color: "#6b7280", label: "아카이브" },
+  skipped:  { bg: "#f1f5f9", color: "#64748b", label: "제외" },
+  archived: { bg: "#f9fafb", color: "#6b7280", label: "제외 (아카이브)" },
 };
 
 const ASSIGN_STATUS_COLOR: Record<string, { bg: string; color: string; label: string }> = {

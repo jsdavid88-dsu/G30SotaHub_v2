@@ -72,9 +72,10 @@ async def list_items(
     category: str | None = None,
     since: datetime | None = None,
     min_score: int | None = Query(None, ge=0, le=10),
+    hide_low: bool = Query(False, description="관련도 낮음(Arca llm_score 1~6) 제외 — 0(미분류·펜딩)+7~10 만. 목록 기본 숨김용."),
     item_status: str | None = Query(
         None,
-        description="workflow status filter (new/triaged/holding/skipped/archived). Triage 페이지에서 'new' 만 가져올 때 사용.",
+        description="workflow status filter (new/triaged/done/holding/skipped/archived). 'skipped' 는 legacy archived 포함.",
         alias="workflow",
     ),
     lifecycle: str | None = Query(None, description="lifecycle_status filter (research/dev/testing/production/deprecated)"),
@@ -96,10 +97,16 @@ async def list_items(
         stmt = stmt.where(Item.discovered_at >= since)
     if min_score is not None:
         stmt = stmt.where(Item.llm_score >= min_score)
+    if hide_low:
+        # 관련도 낮음(Arca 1~6점)만 제외. 0(미분류·펜딩)은 남김 — 새로 발견 항목이 사라지지 않게.
+        stmt = stmt.where(~Item.llm_score.between(1, 6))
     if category:
         stmt = stmt.join(ItemCategory).join(Category).where(Category.slug == category)
     if item_status:
-        stmt = stmt.where(Item.status == item_status)
+        if item_status == "skipped":
+            stmt = stmt.where(Item.status.in_(["skipped", "archived"]))  # 제외 탭 = skip + legacy archive
+        else:
+            stmt = stmt.where(Item.status == item_status)
     if lifecycle:
         try:
             stmt = stmt.where(Item.lifecycle_status == LifecycleStatus(lifecycle))
@@ -222,7 +229,7 @@ async def get_group_siblings(
 
 class ItemPatch(BaseModel):
     """단일 필드 업데이트 — 라이프사이클/우선순위/workflow status 만."""
-    status: Literal["new", "triaged", "holding", "skipped", "archived"] | None = None
+    status: Literal["new", "triaged", "done", "holding", "skipped", "archived"] | None = None
     lifecycle_status: Literal["research", "dev", "testing", "production", "deprecated"] | None = None
     priority: Literal["P0", "P1", "P2", "P3", "WATCH"] | None = None
     description: str | None = Field(None, max_length=500)
@@ -306,14 +313,11 @@ async def triage_item(
             _stamp_metadata(item, "skip_reason", body.note)
 
     elif a == "complete":
-        # active assignments 를 approved 로
+        # 완료 — active assignment 를 approved 로 + status=done(연구 종료). 단순 1트랙: 연구중 → 완료.
         for asg in (item.assignments or []):
             if asg.status not in (SotaAssignmentStatus.approved, SotaAssignmentStatus.rejected):
                 asg.status = SotaAssignmentStatus.approved
-        item.status = "triaged"
-        # research → testing 으로 전환 (이미 dev 면 testing 으로)
-        if item.lifecycle_status in (LifecycleStatus.research, LifecycleStatus.dev):
-            item.lifecycle_status = LifecycleStatus.testing
+        item.status = "done"
 
     elif a == "follow_up":
         item.lifecycle_status = LifecycleStatus.dev

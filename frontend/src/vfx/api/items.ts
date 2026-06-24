@@ -10,7 +10,7 @@ export type SortKey =
   | "keyword_score"
   | "priority";
 
-export type WorkflowStatus = "new" | "triaged" | "holding" | "skipped" | "archived";
+export type WorkflowStatus = "new" | "triaged" | "done" | "holding" | "skipped" | "archived";
 export type LifecycleStatus = "research" | "dev" | "testing" | "production" | "deprecated";
 
 export type ItemFilters = {
@@ -19,6 +19,7 @@ export type ItemFilters = {
   category?: string;
   since?: string;
   min_score?: number;
+  hide_low?: boolean;   // 관련도 낮음(Arca 1~6점) 제외 — 0+7~10 만
   workflow?: WorkflowStatus;
   lifecycle?: LifecycleStatus;
   sort?: SortKey;
