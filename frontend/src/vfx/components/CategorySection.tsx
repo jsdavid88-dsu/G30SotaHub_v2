@@ -27,7 +27,7 @@ export default function CategorySection({
 
   const { data: rawItems = [] } = useQuery({
     queryKey: ["items", "category-section", category.slug, viewMode],
-    queryFn: () => fetchItems({ category: category.slug, sort: "published", limit }),
+    queryFn: () => fetchItems({ category: category.slug, sort: "published", hide_low: true, limit }),
   });
   const { deduped, groupSources } = useMemo(() => dedup(rawItems), [rawItems]);
   const items = viewMode === "table" ? deduped : deduped.slice(0, 6);

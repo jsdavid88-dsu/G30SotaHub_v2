@@ -309,14 +309,14 @@ export default function Dashboard() {
   // 발표일 우선 정렬 (사용자 요청)
   const { data: p0Raw = [] } = useQuery({
     queryKey: ["items", { priority: "P0", sort: "published" }],
-    queryFn: () => fetchItems({ priority: "P0", sort: "published", limit: 10 }),
+    queryFn: () => fetchItems({ priority: "P0", sort: "published", hide_low: true, limit: 10 }),
   });
   const { deduped: p0Items, groupSources: p0Groups } = useMemo(() => dedup(p0Raw), [p0Raw]);
 
   // Triage 대기 중 (status='new') 카운트
   const { data: triageQueue = [] } = useQuery({
     queryKey: ["items", { workflow: "new", count: true }],
-    queryFn: () => fetchItems({ workflow: "new", limit: 500 }),
+    queryFn: () => fetchItems({ workflow: "new", hide_low: true, limit: 500 }),  // Triage 대기 카운트 — 7점 필터와 일치
   });
 
   // 핵심 카테고리(이미지/영상 생성·편집) 는 신규 연구가 제일 먼저 보이도록 항상 상단 고정.

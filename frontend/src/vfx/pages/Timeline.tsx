@@ -9,7 +9,7 @@ import VfxSubNav from "../components/VfxSubNav";
 export default function Timeline() {
   const { data: rawItems = [] } = useQuery({
     queryKey: ["items", "timeline"],
-    queryFn: () => fetchItems({ limit: 200 }),
+    queryFn: () => fetchItems({ hide_low: true, limit: 200 }),  // 관련도 낮음(1~6점) 숨김
   });
   const { deduped: items, groupSources } = useMemo(() => dedup(rawItems), [rawItems]);
 
