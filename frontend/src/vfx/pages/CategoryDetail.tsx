@@ -11,12 +11,10 @@ import ViewToggle from "../components/ViewToggle";
 import AssignModal, { type AssignModalState } from "../components/AssignModal";
 import CategoryKeywordsEditor from "../components/CategoryKeywordsEditor";
 
-// 관련도 낮음 — Arca 가 1~6점으로 매긴 항목(엉뚱/저관련). 기본 숨김 → 토글로 펼치기.
-// 0(미분류·펜딩)은 제외(항상 보임) — 아직 점수 안 매겨진 신규 항목이 사라지지 않게.
-const isBelowBar = (it: { llm_score?: number }) => {
-  const s = it.llm_score ?? 0;
-  return s >= 1 && s <= 6;
-};
+// 분야 브라우즈는 7점 이상(관련도 높음)만 기본 노출 — 사용자 요청 "7점만 보이게".
+// 1~6(저관련) + 0(미분류·펜딩) 전부 기본 숨김 → 아래 토글로 펼침.
+// (신규 미분류는 Triage '새로 발견' 탭에서 봄 — 거기선 0점 노출 유지.)
+const isBelowBar = (it: { llm_score?: number }) => (it.llm_score ?? 0) < 7;
 import { useViewMode } from "../utils/viewMode";
 import { dedup } from "../utils/dedup";
 import { cardStyle, sectionHeaderStyle, sectionTitleStyle, badgeStyle, btnGhost } from "../design";
@@ -225,7 +223,7 @@ export default function CategoryDetail() {
                 color: "var(--color-text-muted)", fontSize: 13, fontWeight: 500, cursor: "pointer",
               }}
             >
-              {showBelow ? `관련도 낮음 ${belowCount}개 숨기기 ▲` : `관련도 낮음 ${belowCount}개 보기 ▼ (Arca 1~6점 — 엉뚱하게 수집된 것)`}
+              {showBelow ? `7점 미만 ${belowCount}개 숨기기 ▲` : `7점 미만 ${belowCount}개 보기 ▼ (관련도 낮음 1~6점 + 미분류)`}
             </button>
           )}
         </div>
